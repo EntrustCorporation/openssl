@@ -13,6 +13,7 @@ $ML_DSA_GOAL=../../libdefault.a ../../libfips.a
 $ML_KEM_GOAL=../../libdefault.a ../../libfips.a
 $TLS_ML_KEM_HYBRID_GOAL=../../libdefault.a ../../libfips.a
 $SLH_DSA_GOAL=../../libdefault.a ../../libfips.a
+$COMPOSITE_GOAL=../../libdefault.a
 
 IF[{- !$disabled{dh} -}]
   SOURCE[$DH_GOAL]=dh_kmgmt.c
@@ -63,3 +64,6 @@ ENDIF
 IF[{- !$disabled{'slh-dsa'} -}]
   SOURCE[$SLH_DSA_GOAL]=slh_dsa_kmgmt.c
 ENDIF
+
+SOURCE[$COMPOSITE_GOAL]=composite_kmgmt.c
+DEPEND[$COMPOSITE_GOAL]=../../common/include/prov/composite.h

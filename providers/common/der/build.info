@@ -86,6 +86,12 @@ IF[{- !$disabled{'ml-dsa'} -}]
   DEPEND[$DER_ML_DSA_H]=oids_to_c.pm ML_DSA.asn1
 ENDIF
 
+#----- composite
+$COMPOSITE_H=$INCDIR/composite.h
+
+GENERATE[$COMPOSITE_H]=$INCDIR/composite.h.in
+DEPEND[$COMPOSITE_H]=oids_to_c.pm composite.asn1
+
 #----- KEY WRAP
 $DER_WRAP_H=$INCDIR/der_wrap.h
 $DER_WRAP_GEN=der_wrap_gen.c
