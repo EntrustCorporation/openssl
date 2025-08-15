@@ -540,6 +540,9 @@ debuginfo: $(SHLIBS)
 		$(OBJCOPY) --strip-debug --add-gnu-debuglink=$$i.debug $$i; \
 	done;
 
+cov-report: $(SHLIBS)
+	@set -e; gcovr -r . --txt-metric=branch --html --html-details -o openssl-metrics.html
+
 ##@ Documentation
 build_generated_pods: $(GENERATED_PODS)
 build_docs: build_man_docs build_html_docs ## Create documentation
@@ -1177,7 +1180,7 @@ generate_buildinfo: generate_doc_buildinfo
 
 .PHONY: doc-nits md-nits
 doc-nits: build_generated_pods ## Evaluate OpenSSL documentation
-	$(PERL) $(SRCDIR)/util/find-doc-nits -c -n -l -e -i
+	$(PERL) $(SRCDIR)/util/find-doc-nits -c -n -l -e -i -a
 
 # This uses "mdl", the markdownlint application, which is written in ruby.
 # The source is at https://github.com/markdownlint/markdownlint
@@ -1416,10 +1419,10 @@ ordinals: build_generated
 test_ordinals:
 	"$(MAKE)" run_tests TESTS=test_ordinals
 
-tags TAGS: FORCE
+tags TAGS: FORCE build_generated
 	rm -f TAGS tags
 	-( cd $(SRCDIR); util/ctags.sh )
-	-etags `find . -name '*.[ch]' -o -name '*.pm'`
+	-etags `find . -name '*.[ch]' -o -name '*.pm' -o -name '*.inc'`
 
 providers/fips.checksum.new: providers/fips.module.sources.new
 	@which unifdef > /dev/null || \

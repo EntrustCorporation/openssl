@@ -182,7 +182,8 @@ static int helper_init(struct helper *h)
     if (!TEST_ptr(h->args.ackm = ossl_ackm_new(fake_now, NULL,
                                                &h->statm,
                                                h->cc_method,
-                                               h->cc_data)))
+                                               h->cc_data,
+                                               /* is_server */0)))
         goto err;
 
     if (!TEST_true(ossl_quic_stream_map_init(&h->qsm, NULL, NULL,
@@ -1704,7 +1705,7 @@ int setup_tests(void)
 {
     ADD_ALL_TESTS(test_script, OSSL_NELEM(scripts));
     ADD_ALL_TESTS(test_dyn_script_1,
-                  OSSL_NELEM(dyn_script_1_crypto_1a)
-                  - dyn_script_1_start_from + 1);
+                  (int)(OSSL_NELEM(dyn_script_1_crypto_1a)
+                        - dyn_script_1_start_from + 1));
     return 1;
 }

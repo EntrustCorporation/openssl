@@ -3163,10 +3163,11 @@ static size_t ossl_quic_pending_int(const SSL *s, int check_channel)
     }
 
     if (check_channel)
+        /* We care about boolean result here only */
         avail = ossl_quic_stream_recv_pending(ctx.xso->stream,
-                                              /*include_fin=*/1)
-             || ossl_quic_channel_has_pending(ctx.qc->ch)
-             || ossl_quic_channel_is_term_any(ctx.qc->ch);
+                                              /*include_fin=*/1) > 0
+              || ossl_quic_channel_has_pending(ctx.qc->ch)
+              || ossl_quic_channel_is_term_any(ctx.qc->ch);
     else
         avail = ossl_quic_stream_recv_pending(ctx.xso->stream,
                                               /*include_fin=*/0);
@@ -3896,7 +3897,15 @@ SSL *ossl_quic_accept_stream(SSL *s, uint64_t flags)
 
     qsm = ossl_quic_channel_get_qsm(ctx.qc->ch);
 
-    qs = ossl_quic_stream_map_peek_accept_queue(qsm);
+    if ((flags & SSL_ACCEPT_STREAM_UNI) && !(flags & SSL_ACCEPT_STREAM_BIDI)) {
+        qs = ossl_quic_stream_map_find_in_accept_queue(qsm, 1);
+    } else if ((flags & SSL_ACCEPT_STREAM_BIDI)
+               && !(flags & SSL_ACCEPT_STREAM_UNI)) {
+        qs = ossl_quic_stream_map_find_in_accept_queue(qsm, 0);
+    } else {
+        qs = ossl_quic_stream_map_peek_accept_queue(qsm);
+    }
+
     if (qs == NULL) {
         if (qctx_blocking(&ctx)
             && (flags & SSL_ACCEPT_STREAM_NO_BLOCK) == 0) {
@@ -4769,6 +4778,7 @@ void ossl_quic_free_token_store(SSL_TOKEN_STORE *hdl)
     ossl_crypto_mutex_free(&hdl->mutex);
     lh_QUIC_TOKEN_doall(hdl->cache, free_this_token);
     lh_QUIC_TOKEN_free(hdl->cache);
+    CRYPTO_FREE_REF(&hdl->references);
     OPENSSL_free(hdl);
     return;
 }
@@ -4938,7 +4948,7 @@ size_t ossl_quic_get_accept_connection_queue_len(SSL *ssl)
 
     qctx_lock(&ctx);
 
-    ret = ossl_quic_port_get_num_incoming_channels(ctx.ql->port);
+    ret = (int)ossl_quic_port_get_num_incoming_channels(ctx.ql->port);
 
     qctx_unlock(&ctx);
     return ret;
@@ -5187,7 +5197,7 @@ QUIC_NEEDS_LOCK
 static int test_poll_event_is(QUIC_CONNECTION *qc, int is_uni)
 {
     return ossl_quic_stream_map_get_accept_queue_len(ossl_quic_channel_get_qsm(qc->ch),
-                                                     is_uni);
+                                                     is_uni) > 0;
 }
 
 /* Do we have the OS (outgoing: stream) condition? */

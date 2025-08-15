@@ -302,12 +302,14 @@ int genpkey_main(int argc, char **argv)
         if (mem_outpubkey != NULL) {
             rv = mem_bio_to_file(mem_outpubkey, outpubkeyfile, outformat, private);
             if (!rv)
-                BIO_printf(bio_err, "Error writing to outpubkey: '%s'. Error: %s\n", outpubkeyfile, strerror(errno));
+                BIO_printf(bio_err, "Error writing to outpubkey: '%s'. Error: %s\n",
+                           outpubkeyfile, strerror(errno));
         }
         if (mem_out != NULL) {
             rv = mem_bio_to_file(mem_out, outfile, outformat, private);
             if (!rv)
-                BIO_printf(bio_err, "Error writing to outfile: '%s'. Error: %s\n", outpubkeyfile, strerror(errno));
+                BIO_printf(bio_err, "Error writing to outfile: '%s'. Error: %s\n",
+                           outfile, strerror(errno));
         }
     }
     EVP_PKEY_free(pkey);
@@ -372,17 +374,21 @@ int init_gen_str(EVP_PKEY_CTX **pctx,
                  OSSL_LIB_CTX *libctx, const char *propq)
 {
     EVP_PKEY_CTX *ctx = NULL;
+#ifndef OPENSSL_NO_DEPRECATED_3_6
     int pkey_id;
+#endif
 
     if (*pctx) {
         BIO_puts(bio_err, "Algorithm already set!\n");
         return 0;
     }
 
+#ifndef OPENSSL_NO_DEPRECATED_3_6
     pkey_id = get_legacy_pkey_id(libctx, algname, e);
     if (pkey_id != NID_undef)
         ctx = EVP_PKEY_CTX_new_id(pkey_id, e);
     else
+#endif
         ctx = EVP_PKEY_CTX_new_from_name(libctx, algname, propq);
 
     if (ctx == NULL)

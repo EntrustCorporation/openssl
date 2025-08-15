@@ -7,8 +7,10 @@
  * https://www.openssl.org/source/license.html
  */
 
-/* We need to use some engine deprecated APIs */
-#define OPENSSL_SUPPRESS_DEPRECATED
+/*
+ * We need to use some engine deprecated APIs
+ */
+#include "internal/deprecated.h"
 
 #include "internal/cryptlib.h"
 #include <stdio.h>
@@ -110,7 +112,7 @@ const EVP_PKEY_ASN1_METHOD *EVP_PKEY_asn1_find_str(ENGINE **pe,
     const EVP_PKEY_ASN1_METHOD *ameth = NULL;
 
     if (len == -1)
-        len = strlen(str);
+        len = (int)strlen(str);
     if (pe) {
 #ifndef OPENSSL_NO_ENGINE
         ENGINE *e;

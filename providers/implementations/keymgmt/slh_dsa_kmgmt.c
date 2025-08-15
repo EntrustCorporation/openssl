@@ -176,13 +176,13 @@ static int slh_dsa_get_params(void *keydata, OSSL_PARAM params[])
     const uint8_t *pub, *priv;
 
     if ((p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_BITS)) != NULL
-            && !OSSL_PARAM_set_int(p, 8 * ossl_slh_dsa_key_get_pub_len(key)))
+            && !OSSL_PARAM_set_size_t(p, 8 * ossl_slh_dsa_key_get_pub_len(key)))
         return 0;
     if ((p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_SECURITY_BITS)) != NULL
-            && !OSSL_PARAM_set_int(p, 8 * ossl_slh_dsa_key_get_n(key)))
+            && !OSSL_PARAM_set_size_t(p, 8 * ossl_slh_dsa_key_get_n(key)))
         return 0;
     if ((p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_MAX_SIZE)) != NULL
-            && !OSSL_PARAM_set_int(p, ossl_slh_dsa_key_get_sig_len(key)))
+            && !OSSL_PARAM_set_size_t(p, ossl_slh_dsa_key_get_sig_len(key)))
         return 0;
     if ((p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_SECURITY_CATEGORY)) != NULL
             && !OSSL_PARAM_set_int(p, ossl_slh_dsa_key_get_security_category(key)))
@@ -409,6 +409,9 @@ static const OSSL_PARAM *slh_dsa_gen_settable_params(ossl_unused void *genctx,
 static void slh_dsa_gen_cleanup(void *genctx)
 {
     struct slh_dsa_gen_ctx *gctx = genctx;
+
+    if (gctx == NULL)
+        return;
 
     OPENSSL_cleanse(gctx->entropy, gctx->entropy_len);
     OPENSSL_free(gctx->propq);

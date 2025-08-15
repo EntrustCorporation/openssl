@@ -31,6 +31,32 @@ OpenSSL 3.6
 
 ### Changes between 3.5 and 3.6 [xx XXX xxxx]
 
+ * The FIPS provider now performs a PCT on key import for RSA, EC and ECX.
+   This is mandated by FIPS 140-3 IG 10.3.A additional comment 1.
+
+   *Dr Paul Dale*
+
+ * Introduce SSL_OP_SERVER_PREFERENCE superceding misleadingly
+   named SSL_OP_CIPHER_SERVER_PREFERENCE.
+
+   *Michael Baentsch*
+
+ * Added LMS signature verification support as per [SP 800-208].  This
+   support is present in both the FIPS and default providers.
+
+   *Shane Lontis and Paul Dale*
+
+ * Introduces use of `<stdbool.h>` when handling JSON encoding in
+   the OpenSSL codebase, replacing the previous use of `int` for
+   these boolean values.
+
+   *Alexis Goodfellow*
+
+ * An ANSI-C toolchain is no longer sufficient for building OpenSSL. The code
+   should build on compilers supporting C-99 features.
+
+   *Alexandr Nedvedicky*
+
  * The VxWorks platforms have been removed. These platforms were unadopted,
    unmaintained and reported to be non-functional.
 
@@ -96,10 +122,55 @@ OpenSSL 3.6
 
    *Dimitri John Ledkov*
 
+ * Add X509_CRL_get0_tbs_sigalg() accessor for the signature AlgorithmIdentifier
+   inside a CRL's TBSCertList.
+
+   *Theo Buehler*
+
+ * HKDF with (SHA-256, SHA-384, SHA-512) has assigned OIDs. Added ability to load
+   HKDF configured with these explicit digests by name or OID.
+
+   *Daniel Van Geest (CryptoNext Security)*
+
+ * Added Intel AVX-512 and VAES optimizations for AES-CFB128 algorithms.
+   Encryption performance on large buffers improved by 1.5-1.7x,
+   while decryption speed increased by 20-23x.
+
+   *Adrian Stanciu*
+
+ * Added support for TLS 1.3 OCSP multi-stapling for server certs.
+     * new `s_client` options:
+       * `-ocsp_check_leaf`: Checks the status of the leaf (server) certificate.
+       * `-ocsp_check_all`: Checks the status of all certificates in the server chain.
+     * new `s_server` option:
+       * `-status_all` Provides OCSP status information for the entire server certificate chain (multi-stapling) for TLS 1.3 and later.
+
+     * Improved `-status_file` option can now be given multiple times to provide
+       multiple files containing OCSP responses.
+
+   *Michael Krueger, Martin Rauch*
+
+ * Added KEMRecipientInfo (RFC 9629) and ML-KEM (draft-ietf-lamps-cms-kyber)
+   support to CMS.
+
+   *Daniel Van Geest (CryptoNext Security)*
+
 OpenSSL 3.5
 -----------
 
 ### Changes between 3.5.0 and 3.5.1 [xx XXX xxxx]
+
+ * Fix x509 application adds trusted use instead of rejected use.
+
+   Issue summary: Use of -addreject option with the openssl x509 application adds
+   a trusted use instead of a rejected use for a certificate.
+
+   Impact summary: If a user intends to make a trusted certificate rejected for
+   a particular use it will be instead marked as trusted for that use.
+
+   ([CVE-2025-4575])
+
+   *Tomas Mraz*
 
  * Aligned the behaviour of TLS and DTLS in the event of a no_renegotiation
    alert being received. Older versions of OpenSSL failed with DTLS if a
@@ -21286,6 +21357,7 @@ ndif
 
 <!-- Links -->
 
+[CVE-2025-4575]: https://www.openssl.org/news/vulnerabilities.html#CVE-2025-4575
 [CVE-2024-13176]: https://www.openssl.org/news/vulnerabilities.html#CVE-2024-13176
 [CVE-2024-9143]: https://www.openssl.org/news/vulnerabilities.html#CVE-2024-9143
 [CVE-2024-6119]: https://www.openssl.org/news/vulnerabilities.html#CVE-2024-6119
@@ -21483,3 +21555,4 @@ ndif
 [CVE-2002-0655]: https://www.openssl.org/news/vulnerabilities.html#CVE-2002-0655
 [CMVP]: https://csrc.nist.gov/projects/cryptographic-module-validation-program
 [ESV]: https://csrc.nist.gov/Projects/cryptographic-module-validation-program/entropy-validations
+[SP 800-208]: https://csrc.nist.gov/pubs/sp/800/208/final

@@ -18,7 +18,7 @@ setup("test_ec");
 
 plan skip_all => 'EC is not supported in this build' if disabled('ec');
 
-plan tests => 15;
+plan tests => 16;
 
 my $no_fips = disabled('fips') || ($ENV{NO_FIPS} // 0);
 
@@ -33,6 +33,16 @@ subtest 'EC conversions -- private key' => sub {
     tconversion( -type => 'ec', -prefix => 'ec-priv',
                  -in => srctop_file("test","testec-p256.pem") );
 };
+
+SKIP: {
+    skip "SM2 is not supported by this OpenSSL build", 1
+        if disabled("sm2");
+    subtest 'EC conversions -- private key' => sub {
+        tconversion( -type => 'ec', -prefix => 'sm2-priv',
+                     -in => srctop_file("test","testec-sm2.pem") );
+    };
+}
+
 subtest 'EC conversions -- private key PKCS#8' => sub {
     tconversion( -type => 'ec', -prefix => 'ec-pkcs8',
                  -in => srctop_file("test","testec-p256.pem"),
