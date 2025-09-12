@@ -464,6 +464,7 @@ CRMF_R_ERROR_DECRYPTING_ENCRYPTEDKEY:124:error decrypting encryptedkey
 CRMF_R_ERROR_DECRYPTING_ENCRYPTEDVALUE:125:error decrypting encryptedvalue
 CRMF_R_ERROR_DECRYPTING_SYMMETRIC_KEY:106:error decrypting symmetric key
 CRMF_R_ERROR_SETTING_PURPOSE:126:error setting purpose
+CRMF_R_ERROR_SIGNING_POPO:129:error signing popo
 CRMF_R_ERROR_VERIFYING_ENCRYPTEDKEY:127:error verifying encryptedkey
 CRMF_R_FAILURE_OBTAINING_RANDOM:107:failure obtaining random
 CRMF_R_ITERATIONCOUNT_BELOW_100:108:iterationcount below 100
@@ -808,6 +809,8 @@ EVP_R_PRIVATE_KEY_DECODE_ERROR:145:private key decode error
 EVP_R_PRIVATE_KEY_ENCODE_ERROR:146:private key encode error
 EVP_R_PROVIDER_ASYM_CIPHER_FAILURE:232:provider asym cipher failure
 EVP_R_PROVIDER_ASYM_CIPHER_NOT_SUPPORTED:235:provider asym cipher not supported
+EVP_R_PROVIDER_GET_CTX_PARAMS_NOT_SUPPORTED:238:\
+	provider get ctx params not supported
 EVP_R_PROVIDER_KEYMGMT_FAILURE:233:provider keymgmt failure
 EVP_R_PROVIDER_KEYMGMT_NOT_SUPPORTED:236:provider keymgmt not supported
 EVP_R_PROVIDER_SIGNATURE_FAILURE:234:provider signature failure
@@ -1079,6 +1082,7 @@ PROV_R_FAILED_TO_SIGN:175:failed to sign
 PROV_R_FINAL_CALL_OUT_OF_ORDER:237:final call out of order
 PROV_R_FIPS_MODULE_CONDITIONAL_ERROR:227:fips module conditional error
 PROV_R_FIPS_MODULE_ENTERING_ERROR_STATE:224:fips module entering error state
+PROV_R_FIPS_MODULE_IMPORT_PCT_ERROR:253:fips module import pct error
 PROV_R_FIPS_MODULE_IN_ERROR_STATE:225:fips module in error state
 PROV_R_GENERATE_ERROR:191:generate error
 PROV_R_ILLEGAL_OR_UNSUPPORTED_PADDING_MODE:165:\

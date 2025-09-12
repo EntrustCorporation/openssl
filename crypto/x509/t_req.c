@@ -18,7 +18,7 @@
 #include <openssl/dsa.h>
 
 #ifndef OPENSSL_NO_STDIO
-int X509_REQ_print_fp(FILE *fp, X509_REQ *x)
+int X509_REQ_print_fp(FILE *fp, const X509_REQ *x)
 {
     BIO *b;
     int ret;
@@ -34,13 +34,12 @@ int X509_REQ_print_fp(FILE *fp, X509_REQ *x)
 }
 #endif
 
-int X509_REQ_print_ex(BIO *bp, X509_REQ *x, unsigned long nmflags,
-                      unsigned long cflag)
+int X509_REQ_print_ex(BIO *bp, const X509_REQ *x, unsigned long nmflags, unsigned long cflag)
 {
     long l;
     int i;
     EVP_PKEY *pkey;
-    STACK_OF(X509_EXTENSION) *exts;
+    STACK_OF(X509_EXTENSION) *exts = NULL;
     char mlch = ' ';
     int nmindent = 0, printok = 0;
 
@@ -191,6 +190,7 @@ int X509_REQ_print_ex(BIO *bp, X509_REQ *x, unsigned long nmflags,
                     goto err;
             }
             sk_X509_EXTENSION_pop_free(exts, X509_EXTENSION_free);
+            exts = NULL;
         }
     }
 
@@ -204,11 +204,12 @@ int X509_REQ_print_ex(BIO *bp, X509_REQ *x, unsigned long nmflags,
 
     return 1;
  err:
+    sk_X509_EXTENSION_pop_free(exts, X509_EXTENSION_free);
     ERR_raise(ERR_LIB_X509, ERR_R_BUF_LIB);
     return 0;
 }
 
-int X509_REQ_print(BIO *bp, X509_REQ *x)
+int X509_REQ_print(BIO *bp, const X509_REQ *x)
 {
     return X509_REQ_print_ex(bp, x, XN_FLAG_COMPAT, X509_FLAG_COMPAT);
 }

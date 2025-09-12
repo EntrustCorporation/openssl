@@ -103,7 +103,6 @@ int wrap_password_callback(char *buf, int bufsiz, int verify, void *cb_data);
 /* progress callback for dsaparam, dhparam, req, genpkey, etc. */
 int progress_cb(EVP_PKEY_CTX *ctx);
 
-int chopup_args(ARGS *arg, char *buf);
 void dump_cert_text(BIO *out, X509 *x);
 void print_name(BIO *out, const char *title, const X509_NAME *nm);
 void print_bignum_var(BIO *, const BIGNUM *, const char *,
@@ -140,6 +139,8 @@ EVP_PKEY *load_keyparams_suppress(const char *uri, int format, int maybe_stdin,
                                   const char *keytype, const char *desc,
                                   int suppress_decode_errors);
 char *next_item(char *opt); /* in list separated by comma and/or space */
+char *process_additional_mac_key_arguments(const char *arg);
+char *get_str_from_file(const char *filename);
 int load_cert_certs(const char *uri,
                     X509 **pcert, STACK_OF(X509) **pcerts,
                     int exclude_http, const char *pass, const char *desc,
@@ -230,7 +231,26 @@ typedef struct ca_db_st {
 extern int do_updatedb(CA_DB *db, time_t *now);
 
 void app_bail_out(char *fmt, ...);
+/**
+ * OPENSSL_malloc() wrapper that bails out with a meaningful message on failure.
+ *
+ * @param sz   Number of bytes to allocate.
+ * @param what Description of the object being allocated.
+ * @return On success, returns a pointer to the newly allocated memory.
+ *         on failure, calls app_bail_out() to terminate the program.
+ */
 void *app_malloc(size_t sz, const char *what);
+/**
+ * OPENSSL_malloc_array() wrapper that bails out with a meaningful message
+ * on failure.
+ *
+ * @param n    Number of objects to allocate memory for.
+ * @param sz   Size in bytes of each object to be allocated.
+ * @param what Description of the array being allocated.
+ * @return On success, returns a pointer to the newly allocated memory;
+ *         on failure, calls app_bail_out() to terminate the program.
+ */
+void *app_malloc_array(size_t n, size_t sz, const char *what);
 
 /* load_serial, save_serial, and rotate_serial are also used for CRL numbers */
 BIGNUM *load_serial(const char *serialfile, int *exists, int create,

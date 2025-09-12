@@ -121,6 +121,16 @@ providers/implementations/keymgmt/ml_kem_kmgmt.c
 providers/implementations/keymgmt/mlx_kmgmt.c
 providers/implementations/signature/dsa_sig.c
 providers/implementations/signature/ecdsa_sig.c
+providers/implementations/keymgmt/dh_kmgmt.c
+providers/implementations/keymgmt/dsa_kmgmt.c
+providers/implementations/keymgmt/ecx_kmgmt.c
+providers/implementations/keymgmt/lms_kmgmt.c
+providers/implementations/keymgmt/mac_legacy_kmgmt.c
+providers/implementations/keymgmt/ml_dsa_kmgmt.c
+providers/implementations/keymgmt/ml_kem_kmgmt.c
+providers/implementations/keymgmt/mlx_kmgmt.c
+providers/implementations/keymgmt/slh_dsa_kmgmt.c
+providers/implementations/keymgmt/template_kmgmt.c
 providers/implementations/signature/eddsa_sig.c
 providers/implementations/signature/ml_dsa_sig.c
 providers/implementations/signature/rsa_sig.c
@@ -341,7 +351,7 @@ providers/implementations/rands/test_rng.c
 # Auto generated assembly language source files
 *.s
 !/crypto/*/asm/*.s
-/crypto/arm*.S
+/crypto/*.S
 /crypto/*/*.S
 *.asm
 !/crypto/*/asm/*.asm

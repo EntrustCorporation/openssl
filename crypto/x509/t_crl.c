@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2021 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1999-2025 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -32,12 +32,12 @@ int X509_CRL_print_fp(FILE *fp, X509_CRL *x)
 }
 #endif
 
-int X509_CRL_print(BIO *out, X509_CRL *x)
+int X509_CRL_print(BIO *out, const X509_CRL *x)
 {
   return X509_CRL_print_ex(out, x, XN_FLAG_COMPAT);
 }
 
-int X509_CRL_print_ex(BIO *out, X509_CRL *x, unsigned long nmflag)
+int X509_CRL_print_ex(BIO *out, const X509_CRL *x, unsigned long nmflag)
 {
     STACK_OF(X509_REVOKED) *rev;
     X509_REVOKED *r;
