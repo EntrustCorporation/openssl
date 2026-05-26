@@ -22,11 +22,6 @@ format is no more needed and the openssl commands will automatically try all
 the possible formats. However if the B<DER> or B<PEM> input format is specified
 it will be enforced.
 
-In order to access a key via an engine the input format B<ENGINE> may be used;
-alternatively the key identifier in the <uri> argument of the respective key
-option may be preceded by C<org.openssl.engine:>.
-See L<openssl(1)/Engine Options> for an example usage of the latter.
-
 =head1 OPTIONS
 
 =head2 Format Options
@@ -65,17 +60,11 @@ is described in each command documentation.
 A binary format, encoded or parsed according to Distinguished Encoding Rules
 (DER) of the ASN.1 data language.
 
-=item B<ENGINE>
-
-Used to specify that the cryptographic material is in an OpenSSL B<engine>.
-An engine must be configured or specified using the B<-engine> option.
-A password or PIN may be supplied to the engine using the B<-passin> option.
-
 =item B<P12>
 
 A DER-encoded file containing a PKCS#12 object.
 It might be necessary to provide a decryption password to retrieve
-the private key.
+the private key or certificate.
 
 =item B<PEM>
 
@@ -84,11 +73,11 @@ a block of base-64 encoding (defined in IETF RFC 4648), with specific
 lines used to mark the start and end:
 
  Text before the BEGIN line is ignored.
- ----- BEGIN object-type -----
+ -----BEGIN object-type-----
  OT43gQKBgQC/2OHZoko6iRlNOAQ/tMVFNq7fL81GivoQ9F1U0Qr+DH3ZfaH8eIkX
  xT0ToMPJUzWAn8pZv0snA0um6SIgvkCuxO84OkANCVbttzXImIsL7pFzfcwV/ERK
  UM6j0ZuSMFOCr/lGPAoOQU0fskidGEHi1/kW+suSr28TqsyYZpwBDQ==
- ----- END object-type -----
+ -----END object-type-----
  Text after the END line is also ignored
 
 The I<object-type> must match the type of object that is expected.

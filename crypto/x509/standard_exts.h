@@ -12,7 +12,12 @@
  * of the ext_nid values.
  */
 
-static const X509V3_EXT_METHOD *standard_exts[] = {
+#if !defined(OSSL_LIBCRYPTO_X509_STANDARD_EXTS_H)
+#define OSSL_LIBCRYPTO_X509_STANDARD_EXTS_H
+
+#include "ext_dat.h"
+
+static const X509V3_EXT_METHOD *const standard_exts[] = {
     &ossl_v3_nscert,
     &ossl_v3_ns_ia5_list[0],
     &ossl_v3_ns_ia5_list[1],
@@ -34,9 +39,7 @@ static const X509V3_EXT_METHOD *standard_exts[] = {
     &ossl_v3_ext_ku,
     &ossl_v3_delta_crl,
     &ossl_v3_crl_reason,
-#ifndef OPENSSL_NO_OCSP
     &ossl_v3_crl_invdate,
-#endif
     &ossl_v3_sxnet,
     &ossl_v3_info,
     &ossl_v3_audit_identity,
@@ -56,9 +59,7 @@ static const X509V3_EXT_METHOD *standard_exts[] = {
     &ossl_v3_policy_constraints,
     &ossl_v3_targeting_information,
     &ossl_v3_no_rev_avail,
-#ifndef OPENSSL_NO_OCSP
     &ossl_v3_crl_hold,
-#endif
     &ossl_v3_pci,
     &ossl_v3_name_constraints,
     &ossl_v3_policy_mappings,
@@ -102,3 +103,4 @@ static const X509V3_EXT_METHOD *standard_exts[] = {
 
 #define STANDARD_EXTENSION_COUNT OSSL_NELEM(standard_exts)
 
+#endif /* !defined(OSSL_LIBCRYPTO_X509_STANDARD_EXTS_H) */

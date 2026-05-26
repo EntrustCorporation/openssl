@@ -22,11 +22,11 @@
  * used is contained in *num;
  */
 void CAST_ofb64_encrypt(const unsigned char *in, unsigned char *out,
-                        long length, const CAST_KEY *schedule,
-                        unsigned char *ivec, int *num)
+    long length, const CAST_KEY *schedule,
+    unsigned char *ivec, int *num)
 {
     register CAST_LONG v0, v1, t;
-    register int n = *num;
+    register int n = *num & 0x07;
     register long l = length;
     unsigned char d[8];
     register char *dp;

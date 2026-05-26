@@ -160,6 +160,7 @@ custom_ext_parse_cb                     datatype
 pem_password_cb                         datatype
 ssl_ct_validation_cb                    datatype
 tls_session_secret_cb_fn                datatype
+tls_session_ticket_ext_cb_fn            datatype
 ASYNC_stack_alloc_fn                    datatype
 ASYNC_stack_free_fn                     datatype
 PKCS12_create_cb                        datatype
@@ -220,6 +221,8 @@ BIO_get_conn_port                       define
 BIO_get_conn_ip_family                  define
 BIO_get_conn_mode                       define
 BIO_get_fd                              define
+BIO_get_flags                           define
+BIO_get_retry_flags                     define
 BIO_get_fp                              define
 BIO_get_indent                          define
 BIO_get_info_callback                   define
@@ -254,6 +257,12 @@ BIO_set_conn_port                       define
 BIO_set_conn_ip_family                  define
 BIO_set_conn_mode                       define
 BIO_set_fd                              define
+BIO_set_flags                           define
+BIO_set_retry_read                      define
+BIO_set_retry_write                     define
+BIO_set_retry_special                   define
+BIO_clear_flags                         define
+BIO_clear_retry_flags                   define
 BIO_set_fp                              define
 BIO_set_indent                          define
 BIO_set_info_callback                   define
@@ -789,6 +798,12 @@ SSL_VALUE_CLASS_FEATURE_REQUEST         define
 SSL_VALUE_CLASS_FEATURE_PEER_REQUEST    define
 SSL_VALUE_CLASS_FEATURE_NEGOTIATED      define
 SSL_VALUE_QUIC_IDLE_TIMEOUT             define
+SSL_VALUE_QUIC_UDP_PAYLOAD_SIZE_MAX     define
+SSL_VALUE_QUIC_WINDOWCON                define
+SSL_VALUE_QUIC_WINDOWBSTR               define
+SSL_VALUE_QUIC_WINDOWUSTR               define
+SSL_VALUE_QUIC_ACK_DELAY_EXPONENT       define
+SSL_VALUE_QUIC_ACK_DELAY_MAX            define
 SSL_VALUE_QUIC_STREAM_BIDI_LOCAL_AVAIL  define
 SSL_VALUE_QUIC_STREAM_BIDI_REMOTE_AVAIL define
 SSL_VALUE_QUIC_STREAM_UNI_LOCAL_AVAIL   define
@@ -882,3 +897,5 @@ OPENSSL_load_u64_be                     inline
 OPENSSL_load_u64_le                     inline
 OPENSSL_store_u64_be                    inline
 OPENSSL_store_u64_le                    inline
+OSSL_BEGIN_ALLOW_DEPRECATED             define
+OSSL_END_ALLOW_DEPRECATED               define

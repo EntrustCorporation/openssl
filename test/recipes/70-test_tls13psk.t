@@ -11,6 +11,7 @@ use OpenSSL::Test qw/:DEFAULT cmdstr srctop_file srctop_dir bldtop_dir/;
 use OpenSSL::Test::Utils;
 use File::Temp qw(tempfile);
 use TLSProxy::Proxy;
+use Cwd qw(abs_path);
 
 my $test_name = "test_tls13psk";
 setup($test_name);
@@ -18,8 +19,8 @@ setup($test_name);
 plan skip_all => "TLSProxy isn't usable on $^O"
     if $^O =~ /^(VMS)$/;
 
-plan skip_all => "$test_name needs the dynamic engine feature enabled"
-    if disabled("engine") || disabled("dynamic-engine");
+plan skip_all => "$test_name needs the module feature enabled"
+    if disabled("module");
 
 plan skip_all => "$test_name needs the sock feature enabled"
     if disabled("sock");
@@ -27,16 +28,20 @@ plan skip_all => "$test_name needs the sock feature enabled"
 plan skip_all => "$test_name needs TLSv1.3 enabled"
     if disabled("tls1_3") || (disabled("ec") && disabled("dh"));
 
+$ENV{OPENSSL_MODULES} = abs_path(bldtop_dir("test"));
+
 my $proxy = TLSProxy::Proxy->new(
     undef,
     cmdstr(app(["openssl"]), display => 1),
     srctop_file("apps", "server.pem"),
-    (!$ENV{HARNESS_ACTIVE} || $ENV{HARNESS_VERBOSE})
+    (!$ENV{HARNESS_ACTIVE} || $ENV{HARNESS_VERBOSE}),
+    have_IPv6()
 );
 
 use constant {
     PSK_LAST_FIRST_CH => 0,
-    ILLEGAL_EXT_SECOND_CH => 1
+    ILLEGAL_EXT_SECOND_CH => 1,
+    TOO_MANY_PSKS => 2
 };
 
 #Most PSK tests are done in test_ssl_new. This tests various failure scenarios
@@ -48,7 +53,7 @@ $proxy->clientflags("-sess_out ".$session);
 $proxy->serverflags("-servername localhost");
 $proxy->sessionfile($session);
 $proxy->start() or plan skip_all => "Unable to start up Proxy for tests";
-plan tests => 5;
+plan tests => 7;
 ok(TLSProxy::Message->success(), "Initial connection");
 
 #Test 2: Attempt a resume with PSK not in last place. Should fail
@@ -108,7 +113,44 @@ $proxy->filter(\&remove_sig_algs_filter);
 $proxy->start();
 ok(TLSProxy::Message->success(), "Remove sig algs");
 
+#Test 6: Attempt a resume with too many PSKs. Handshake should still succeed.
+#        It will just ignore the PSKs.
+$proxy->clear();
+$proxy->clientflags("-sess_in ".$session);
+$proxy->filter(\&modify_psk_filter);
+$testtype = TOO_MANY_PSKS;
+$proxy->start();
+ok(TLSProxy::Message->success(), "Too many PSKs");
+
+my $proxy2 = TLSProxy::Proxy->new(
+    undef,
+    cmdstr(app(["openssl"]), display => 1),
+    undef, # Deliberately set to no_cert to force a PSK-only server
+    (!$ENV{HARNESS_ACTIVE} || $ENV{HARNESS_VERBOSE}),
+    have_IPv6()
+);
+
+#Test 7: Attempt an invalid resume, with a server that can only do PSK.
+#        Should be treated the same as an invalid binder (decrypt_error)
+#        as per RFC8446 Appendix E.6
+$proxy2->clear();
+$proxy2->clientflags("-sess_in ".$session);
+$proxy2->serverflags("-psk ffeeddccbbaa99887766554433221100 -no_ticket");
+$proxy2->start() or die "Failed to start proxy2";
+ok(is_decode_error_server_alert(), "Bad PSK with no handshake fallback");
+
 unlink $session;
+
+sub is_decode_error_server_alert
+{
+    return 0 unless TLSProxy::Message->fail();
+
+    my $alert = TLSProxy::Message->alert();
+    return 1 if $alert->server()
+                && $alert->description()
+                   == TLSProxy::Message::AL_DESC_DECRYPT_ERROR;
+    return 0;
+}
 
 sub modify_psk_filter
 {
@@ -116,19 +158,19 @@ sub modify_psk_filter
     my $flight;
     my $message;
 
-    if ($testtype == PSK_LAST_FIRST_CH) {
-        $flight = 0;
-    } else {
+    if ($testtype == ILLEGAL_EXT_SECOND_CH) {
         $flight = 2;
+    } else {
+        $flight = 0;
     }
 
     # Only look at the first or second ClientHello
     return if $proxy->flight != $flight;
 
-    if ($testtype == PSK_LAST_FIRST_CH) {
-        $message = ${$proxy->message_list}[0];
-    } else {
+    if ($testtype == ILLEGAL_EXT_SECOND_CH) {
         $message = ${$proxy->message_list}[2];
+    } else {
+        $message = ${$proxy->message_list}[0];
     }
 
     return if (!defined $message
@@ -136,9 +178,20 @@ sub modify_psk_filter
 
     if ($testtype == PSK_LAST_FIRST_CH) {
         $message->set_extension(TLSProxy::Message::EXT_FORCE_LAST, "");
-    } else {
+    } elsif ($testtype == ILLEGAL_EXT_SECOND_CH) {
         #Deliberately break the connection
         $message->set_extension(TLSProxy::Message::EXT_SUPPORTED_GROUPS, "");
+    } else {
+        my $psklist = pack "C*",
+            0x00, 0x77, #Identities length
+            ((
+                0x00, 0x01, #Identity length
+                0x01, #Identity data
+                0x00, 0x00, 0x00, 0x00 #Obfuscated ticket age
+            ) x 17), #17 identities
+            0x00, 0x22, #Binder length
+            (0x01) x 34; #17 fake binders, each with 1 length byte, and 1 payload byte
+        $message->set_extension(TLSProxy::Message::EXT_PSK, $psklist);
     }
     $message->repack();
 }

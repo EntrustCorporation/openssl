@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2025 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2016-2026 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -14,17 +14,17 @@
 
 #if !defined(OPENSSL_THREADS) || defined(CRYPTO_TDEBUG)
 
-# if defined(OPENSSL_SYS_UNIX)
-#  include <sys/types.h>
-#  include <unistd.h>
-# endif
+#if defined(OPENSSL_SYS_UNIX)
+#include <sys/types.h>
+#include <unistd.h>
+#endif
 
 struct rcu_lock_st {
     struct rcu_cb_item *cb_items;
 };
 
 CRYPTO_RCU_LOCK *ossl_rcu_lock_new(int num_writers,
-                                   ossl_unused OSSL_LIB_CTX *ctx)
+    ossl_unused OSSL_LIB_CTX *ctx)
 {
     struct rcu_lock_st *lock;
 
@@ -72,18 +72,23 @@ void ossl_synchronize_rcu(CRYPTO_RCU_LOCK *lock)
     }
 }
 
-int ossl_rcu_call(CRYPTO_RCU_LOCK *lock, rcu_cb_fn cb, void *data)
+CRYPTO_RCU_CB_ITEM *ossl_rcu_cb_item_new(void)
 {
-    struct rcu_cb_item *new = OPENSSL_zalloc(sizeof(*new));
+    return OPENSSL_zalloc(sizeof(CRYPTO_RCU_CB_ITEM));
+}
 
-    if (new == NULL)
-        return 0;
+void ossl_rcu_cb_item_free(CRYPTO_RCU_CB_ITEM *item)
+{
+    OPENSSL_free(item);
+}
 
-    new->fn = cb;
-    new->data = data;
-    new->next = lock->cb_items;
-    lock->cb_items = new;
-    return 1;
+void ossl_rcu_call(CRYPTO_RCU_LOCK *lock, CRYPTO_RCU_CB_ITEM *item,
+    rcu_cb_fn cb, void *data)
+{
+    item->fn = cb;
+    item->data = data;
+    item->next = lock->cb_items;
+    lock->cb_items = item;
 }
 
 void *ossl_rcu_uptr_deref(void **p)
@@ -130,7 +135,8 @@ int CRYPTO_THREAD_unlock(CRYPTO_RWLOCK *lock)
     return 1;
 }
 
-void CRYPTO_THREAD_lock_free(CRYPTO_RWLOCK *lock) {
+void CRYPTO_THREAD_lock_free(CRYPTO_RWLOCK *lock)
+{
     if (lock == NULL)
         return;
 
@@ -151,7 +157,7 @@ int CRYPTO_THREAD_run_once(CRYPTO_ONCE *once, void (*init)(void))
     return 1;
 }
 
-# define OPENSSL_CRYPTO_THREAD_LOCAL_KEY_MAX 256
+#define OPENSSL_CRYPTO_THREAD_LOCAL_KEY_MAX 256
 
 struct thread_local_storage_entry {
     void *data;
@@ -221,41 +227,41 @@ int CRYPTO_THREAD_compare_id(CRYPTO_THREAD_ID a, CRYPTO_THREAD_ID b)
 int CRYPTO_atomic_add(int *val, int amount, int *ret, CRYPTO_RWLOCK *lock)
 {
     *val += amount;
-    *ret  = *val;
+    *ret = *val;
 
     return 1;
 }
 
 int CRYPTO_atomic_add64(uint64_t *val, uint64_t op, uint64_t *ret,
-                        CRYPTO_RWLOCK *lock)
+    CRYPTO_RWLOCK *lock)
 {
     *val += op;
-    *ret  = *val;
+    *ret = *val;
 
     return 1;
 }
 
 int CRYPTO_atomic_and(uint64_t *val, uint64_t op, uint64_t *ret,
-                      CRYPTO_RWLOCK *lock)
+    CRYPTO_RWLOCK *lock)
 {
     *val &= op;
-    *ret  = *val;
+    *ret = *val;
 
     return 1;
 }
 
 int CRYPTO_atomic_or(uint64_t *val, uint64_t op, uint64_t *ret,
-                     CRYPTO_RWLOCK *lock)
+    CRYPTO_RWLOCK *lock)
 {
     *val |= op;
-    *ret  = *val;
+    *ret = *val;
 
     return 1;
 }
 
 int CRYPTO_atomic_load(uint64_t *val, uint64_t *ret, CRYPTO_RWLOCK *lock)
 {
-    *ret  = *val;
+    *ret = *val;
 
     return 1;
 }
@@ -274,6 +280,35 @@ int CRYPTO_atomic_load_int(int *val, int *ret, CRYPTO_RWLOCK *lock)
     return 1;
 }
 
+int CRYPTO_atomic_store_int(int *dst, int val, CRYPTO_RWLOCK *lock)
+{
+    *dst = val;
+
+    return 1;
+}
+
+int CRYPTO_atomic_load_ptr(void **ptr, void **ret, CRYPTO_RWLOCK *lock)
+{
+    *ret = *ptr;
+    return 1;
+}
+
+int CRYPTO_atomic_store_ptr(void **dst, void **val, CRYPTO_RWLOCK *lock)
+{
+    *dst = *val;
+    return 1;
+}
+
+int CRYPTO_atomic_cmp_exch_ptr(void **ptr, void **expect, void *desire, CRYPTO_RWLOCK *lock)
+{
+    if (*ptr == *expect) {
+        *ptr = desire;
+        return 1;
+    }
+    *expect = *ptr;
+    return 0;
+}
+
 int openssl_init_fork_handlers(void)
 {
     return 0;
@@ -281,10 +316,10 @@ int openssl_init_fork_handlers(void)
 
 int openssl_get_fork_id(void)
 {
-# if defined(OPENSSL_SYS_UNIX)
+#if defined(OPENSSL_SYS_UNIX)
     return getpid();
-# else
+#else
     return 0;
-# endif
+#endif
 }
 #endif

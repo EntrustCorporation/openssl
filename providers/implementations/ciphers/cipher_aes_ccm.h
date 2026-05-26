@@ -7,13 +7,16 @@
  * https://www.openssl.org/source/license.html
  */
 
+#if !defined(OSSL_PROVIDERS_IMPLEMENTATIONS_CIPHERS_CIPHER_AES_CCM_H)
+#define OSSL_PROVIDERS_IMPLEMENTATIONS_CIPHERS_CIPHER_AES_CCM_H
+
 #include <openssl/aes.h>
 #include "prov/ciphercommon.h"
 #include "prov/ciphercommon_ccm.h"
 #include "crypto/aes_platform.h"
 
 typedef struct prov_aes_ccm_ctx_st {
-    PROV_CCM_CTX base;         /* Must be first */
+    PROV_CCM_CTX base; /* Must be first */
     union {
         OSSL_UNION_ALIGN;
         /*-
@@ -39,10 +42,12 @@ typedef struct prov_aes_ccm_ctx_st {
                 unsigned char b[AES_BLOCK_SIZE];
             } buf;
             unsigned char dummy_pad[168];
-            unsigned int fc;   /* fc has same offset as ks.ks.rounds */
+            unsigned int fc; /* fc has same offset as ks.ks.rounds */
         } s390x;
 #endif /* defined(OPENSSL_CPUID_OBJ) && defined(__s390__) */
     } ccm;
 } PROV_AES_CCM_CTX;
 
 const PROV_CCM_HW *ossl_prov_aes_hw_ccm(size_t keylen);
+
+#endif /* !defined(OSSL_PROVIDERS_IMPLEMENTATIONS_CIPHERS_CIPHER_AES_CCM_H) */

@@ -7,6 +7,9 @@
  * https://www.openssl.org/source/license.html
  */
 
+#if !defined(OSSL_PROVIDERS_IMPLEMENTATIONS_CIPHERS_CIPHER_ARIA_CCM_H)
+#define OSSL_PROVIDERS_IMPLEMENTATIONS_CIPHERS_CIPHER_ARIA_CCM_H
+
 #include "crypto/aria.h"
 #include "prov/ciphercommon.h"
 #include "prov/ciphercommon_ccm.h"
@@ -16,7 +19,9 @@ typedef struct prov_aria_ccm_ctx_st {
     union {
         OSSL_UNION_ALIGN;
         ARIA_KEY ks;
-    } ks;                       /* ARIA key schedule to use */
+    } ks; /* ARIA key schedule to use */
 } PROV_ARIA_CCM_CTX;
 
 const PROV_CCM_HW *ossl_prov_aria_hw_ccm(size_t keylen);
+
+#endif /* !defined(OSSL_PROVIDERS_IMPLEMENTATIONS_CIPHERS_CIPHER_ARIA_CCM_H) */

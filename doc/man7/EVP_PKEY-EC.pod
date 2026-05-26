@@ -161,6 +161,15 @@ The following Gettable types are also available for the built-in EC algorithm:
 
 =over 4
 
+=item "field-degree" (B<OSSL_PKEY_PARAM_EC_FIELD_DEGREE>) <integer>
+
+This is the bit length of the curve's field coefficients.
+It coincides with the B<OSSL_PKEY_PARAM_EC_CHAR2_M> parameter for binary
+fields, and is otherwise (for prime fields) equal to the bit length of the
+field's characteristic.
+For most curves (e.g. C<secp160r1>) this number is embedded in the curve's
+name.
+
 =item "basis-type" (B<OSSL_PKEY_PARAM_EC_CHAR2_TYPE>) <UTF8 string>
 
 Supports the values "tpBasis" for a trinomial or "ppBasis" for a pentanomial.
@@ -194,7 +203,8 @@ OpenSSL FIPS provider's EC algorithm:
 
 =item "key-check" (B<OSSL_PKEY_PARAM_FIPS_KEY_CHECK>) <integer>
 
-See L<provider-keymgmt(7)/Common Information Parameters> for further information.
+See L<provider-keymgmt(7)/Common Information Parameters> for descriptions
+of additional parameters generally available across all algorithms.
 
 =back
 
@@ -228,6 +238,13 @@ I<ECC Partial Public-Key Validation> respectively.
 For EC Keys, L<EVP_PKEY_private_check(3)> and L<EVP_PKEY_pairwise_check(3)>
 conform to SP800-56Ar3 I<Private key validity> and
 I<Owner Assurance of Pair-wise Consistency> respectively.
+
+=head1 NOTES
+
+"qx" (B<OSSL_PKEY_PARAM_EC_PUB_X>) and "qy" (B<OSSL_PKEY_PARAM_EC_PUB_Y>)
+can be used for getting the EC public key affine coordinates. To set
+them call EVP_EC_affine2oct() to convert affine coordinates to
+an octet string and then use "pub" (B<OSSL_PKEY_PARAM_PUB_KEY>).
 
 =head1 EXAMPLES
 
@@ -300,9 +317,13 @@ L<provider-keymgmt(7)>,
 L<EVP_SIGNATURE-ECDSA(7)>,
 L<EVP_KEYEXCH-ECDH(7)>
 
+=head1 HISTORY
+
+The B<OSSL_PKEY_PARAM_EC_FIELD_DEGREE> parameter was added in OpenSSL 4.0.
+
 =head1 COPYRIGHT
 
-Copyright 2020-2024 The OpenSSL Project Authors. All Rights Reserved.
+Copyright 2020-2026 The OpenSSL Project Authors. All Rights Reserved.
 
 Licensed under the Apache License 2.0 (the "License").  You may not use
 this file except in compliance with the License.  You can obtain a copy

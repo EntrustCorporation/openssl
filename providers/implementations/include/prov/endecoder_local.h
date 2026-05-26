@@ -7,6 +7,9 @@
  * https://www.openssl.org/source/license.html
  */
 
+#if !defined(OSSL_PROVIDERS_IMPLEMENTATIONS_INCLUDE_PROV_ENDECODER_LOCAL_H)
+#define OSSL_PROVIDERS_IMPLEMENTATIONS_INCLUDE_PROV_ENDECODER_LOCAL_H
+
 #include <openssl/core.h>
 #include <openssl/core_dispatch.h>
 #include <openssl/types.h>
@@ -18,11 +21,13 @@ OSSL_FUNC_keymgmt_import_fn *ossl_prov_get_keymgmt_import(const OSSL_DISPATCH *f
 OSSL_FUNC_keymgmt_export_fn *ossl_prov_get_keymgmt_export(const OSSL_DISPATCH *fns);
 
 int ossl_prov_der_from_p8(unsigned char **new_der, long *new_der_len,
-                          unsigned char *input_der, long input_der_len,
-                          OSSL_PASSPHRASE_CALLBACK *pw_cb, void *pw_cbarg);
+    unsigned char *input_der, long input_der_len,
+    OSSL_PASSPHRASE_CALLBACK *pw_cb, void *pw_cbarg);
 
 void *ossl_prov_import_key(const OSSL_DISPATCH *fns, void *provctx,
-                           int selection, const OSSL_PARAM params[]);
+    int selection, const OSSL_PARAM params[]);
 void ossl_prov_free_key(const OSSL_DISPATCH *fns, void *key);
-int ossl_read_der(PROV_CTX *provctx, OSSL_CORE_BIO *cin,  unsigned char **data,
-                  long *len);
+int ossl_read_der(PROV_CTX *provctx, OSSL_CORE_BIO *cin, unsigned char **data,
+    long *len);
+
+#endif /* !defined(OSSL_PROVIDERS_IMPLEMENTATIONS_INCLUDE_PROV_ENDECODER_LOCAL_H) */

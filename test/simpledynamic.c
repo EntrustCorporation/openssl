@@ -8,8 +8,8 @@
  */
 
 #include <string.h>
-#include <stdlib.h>              /* For NULL */
-#include <openssl/macros.h>      /* For NON_EMPTY_TRANSLATION_UNIT */
+#include <stdlib.h> /* For NULL */
+#include <openssl/macros.h> /* For NON_EMPTY_TRANSLATION_UNIT */
 #include <openssl/e_os2.h>
 #include "simpledynamic.h"
 
@@ -52,7 +52,7 @@ int sd_load(const char *filename, SD *lib, ossl_unused int type)
 
 int sd_sym(SD lib, const char *symname, SD_SYM *sym)
 {
-    *sym = (SD_SYM)GetProcAddress(lib, symname);
+    *sym = (SD_SYM)(uintptr_t)GetProcAddress(lib, symname);
     return *sym != NULL;
 }
 
@@ -67,7 +67,7 @@ const char *sd_error(void)
 
     buffer[0] = '\0';
     FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, NULL, GetLastError(), 0,
-                   buffer, sizeof(buffer), NULL);
+        buffer, sizeof(buffer), NULL);
     return buffer;
 }
 

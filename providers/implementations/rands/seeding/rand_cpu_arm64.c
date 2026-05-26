@@ -12,9 +12,8 @@
 #include "crypto/rand_pool.h"
 #include "prov/seeding.h"
 
-
 #ifdef OPENSSL_RAND_SEED_RDCPU
-#include "crypto/arm_arch.h"
+#include "arch/arm_arch.h"
 
 size_t OPENSSL_rndrrs_bytes(unsigned char *buf, size_t len);
 
@@ -53,7 +52,7 @@ size_t ossl_prov_acquire_entropy_from_cpu(RAND_POOL *pool)
 static size_t get_hardware_random_value(unsigned char *buf, size_t len)
 {
     /* Always use RNDRRS or nothing */
-    if (OPENSSL_armcap_P & ARMV8_RNG)  {
+    if (OPENSSL_armcap_P & ARMV8_RNG) {
         if (OPENSSL_rndrrs_bytes(buf, len) != len)
             return 0;
     } else {

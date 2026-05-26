@@ -1,5 +1,5 @@
 /*
- *  Copyright 2022-2025 The OpenSSL Project Authors. All Rights Reserved.
+ *  Copyright 2022-2026 The OpenSSL Project Authors. All Rights Reserved.
  *
  *  Licensed under the Apache License 2.0 (the "License").  You may not use
  *  this file except in compliance with the License.  You can obtain a copy
@@ -19,6 +19,7 @@
 #include <netinet/in.h>
 
 #define SOCKET int
+#define INVALID_SOCKET -1
 #define closesocket(s) close(s)
 
 #else
@@ -28,9 +29,9 @@
 
 static const int server_port = 4433;
 
-typedef unsigned char   flag;
-#define true            1
-#define false           0
+typedef unsigned char flag;
+#define true 1
+#define false 0
 
 /*
  * This flag won't be useful until both accept/read (TCP & SSL) methods
@@ -45,7 +46,7 @@ static SOCKET create_socket(flag isServer)
     struct sockaddr_in addr;
 
     s = socket(AF_INET, SOCK_STREAM, 0);
-    if (s < 0) {
+    if (s == INVALID_SOCKET) {
         perror("Unable to create socket");
         exit(EXIT_FAILURE);
     }
@@ -57,12 +58,12 @@ static SOCKET create_socket(flag isServer)
 
         /* Reuse the address; good for quick restarts */
         if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (void *)&optval, sizeof(optval))
-                < 0) {
+            < 0) {
             perror("setsockopt(SO_REUSEADDR) failed");
             exit(EXIT_FAILURE);
         }
 
-        if (bind(s, (struct sockaddr*) &addr, sizeof(addr)) < 0) {
+        if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
             perror("Unable to bind");
             exit(EXIT_FAILURE);
         }
@@ -146,8 +147,8 @@ int main(int argc, char **argv)
     SSL_CTX *ssl_ctx = NULL;
     SSL *ssl = NULL;
 
-    SOCKET server_skt = -1;
-    SOCKET client_skt = -1;
+    SOCKET server_skt = INVALID_SOCKET;
+    SOCKET client_skt = INVALID_SOCKET;
 
     /* used by fgets */
     char buffer[BUFFERSIZE];
@@ -166,14 +167,14 @@ int main(int argc, char **argv)
     unsigned int addr_len = sizeof(addr);
 #endif
 
-#if !defined (OPENSSL_SYS_WINDOWS)
+#if !defined(OPENSSL_SYS_WINDOWS)
     /* ignore SIGPIPE so that server can continue running when client pipe closes abruptly */
     signal(SIGPIPE, SIG_IGN);
 #endif
 
     /* Splash */
     printf("\nsslecho : Simple Echo Client/Server : %s : %s\n\n", __DATE__,
-    __TIME__);
+        __TIME__);
 
     /* Need to know if client or server */
     if (argc < 2) {
@@ -211,9 +212,9 @@ int main(int argc, char **argv)
          */
         while (server_running) {
             /* Wait for TCP connection from client */
-            client_skt = accept(server_skt, (struct sockaddr*) &addr,
-                                &addr_len);
-            if (client_skt < 0) {
+            client_skt = accept(server_skt, (struct sockaddr *)&addr,
+                &addr_len);
+            if (client_skt == INVALID_SOCKET) {
                 perror("Unable to accept");
                 exit(EXIT_FAILURE);
             }
@@ -270,10 +271,10 @@ int main(int argc, char **argv)
                 SSL_free(ssl);
                 closesocket(client_skt);
                 /*
-                 * Set client_skt to -1 to avoid double close when
+                 * Set client_skt to INVALID_SOCKET to avoid double close when
                  * server_running become false before next accept
                  */
-                client_skt = -1;
+                client_skt = INVALID_SOCKET;
             }
         }
         printf("Server exiting...\n");
@@ -293,7 +294,7 @@ int main(int argc, char **argv)
         inet_pton(AF_INET, rem_server_ip, &addr.sin_addr.s_addr);
         addr.sin_port = htons(server_port);
         /* Do TCP connect with server */
-        if (connect(client_skt, (struct sockaddr*) &addr, sizeof(addr)) != 0) {
+        if (connect(client_skt, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
             perror("Unable to TCP connect to server");
             goto exit;
         } else {
@@ -309,7 +310,7 @@ int main(int argc, char **argv)
         /* Set hostname for SNI */
         SSL_set_tlsext_host_name(ssl, rem_server_ip);
         /* Configure server hostname check */
-        if (!SSL_set1_host(ssl, rem_server_ip)) {
+        if (!SSL_set1_dnsname(ssl, rem_server_ip)) {
             ERR_print_errors_fp(stderr);
             goto exit;
         }
@@ -368,9 +369,9 @@ exit:
     }
     SSL_CTX_free(ssl_ctx);
 
-    if (client_skt != -1)
+    if (client_skt != INVALID_SOCKET)
         closesocket(client_skt);
-    if (server_skt != -1)
+    if (server_skt != INVALID_SOCKET)
         closesocket(server_skt);
 
     printf("sslecho exiting\n");

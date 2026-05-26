@@ -72,6 +72,13 @@ if (!$avx512vaes && `$ENV{CC} -v 2>&1`
     }
 }
 
+if (!$avx512vaes && `$ENV{CC} -x c /dev/null -dM -E|grep __clang_major__`
+    =~ /#define __clang_major__.([0-9]+)/) {
+    if ($1) {
+        $avx512vaes = ($1>=11); #icx started with clang 11
+    }
+}
+
 open OUT, "| \"$^X\" \"$xlate\" $flavour \"$output\""
   or die "can't call $xlate: $!";
 *STDOUT = *OUT;
@@ -2592,7 +2599,7 @@ ___
     $code .= <<___;
         vpclmulqdq        \$0x01,@{[XWORD($GH1L)]},@{[XWORD($RED_POLY)]},@{[XWORD($RED_P1)]}
         vpslldq           \$8,@{[XWORD($RED_P1)]},@{[XWORD($RED_P1)]}                    # ; shift-L 2 DWs
-        vpxorq            @{[XWORD($RED_P1)]},@{[XWORD($GH1L)]},@{[XWORD($RED_P1)]}      # ; first phase of the reduct
+        vpxorq            @{[XWORD($RED_P1)]},@{[XWORD($GH1L)]},@{[XWORD($RED_P1)]}      # ; first phase of the reduction
 ___
   }
 
@@ -3222,7 +3229,7 @@ ___
     $code .= <<___;
         vpclmulqdq        \$0x01,@{[XWORD($GH1L)]},@{[XWORD($RED_POLY)]},@{[XWORD($RED_P1)]}
         vpslldq           \$8,@{[XWORD($RED_P1)]},@{[XWORD($RED_P1)]}                    # ; shift-L 2 DWs
-        vpxorq            @{[XWORD($RED_P1)]},@{[XWORD($GH1L)]},@{[XWORD($RED_P1)]}      # ; first phase of the reduct
+        vpxorq            @{[XWORD($RED_P1)]},@{[XWORD($GH1L)]},@{[XWORD($RED_P1)]}      # ; first phase of the reduction
 ___
   }
 

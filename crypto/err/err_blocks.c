@@ -1,13 +1,11 @@
 /*
- * Copyright 2019-2021 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2019-2026 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
  * in the file LICENSE in the source distribution or at
  * https://www.openssl.org/source/license.html
  */
-
-#define OSSL_FORCE_ERR_STATE
 
 #include <string.h>
 #include <openssl/err.h>
@@ -17,7 +15,7 @@ void ERR_new(void)
 {
     ERR_STATE *es;
 
-    es = ossl_err_get_state_int();
+    es = ossl_err_get_state_int(1);
     if (es == NULL)
         return;
 
@@ -30,7 +28,7 @@ void ERR_set_debug(const char *file, int line, const char *func)
 {
     ERR_STATE *es;
 
-    es = ossl_err_get_state_int();
+    es = ossl_err_get_state_int(1);
     if (es == NULL)
         return;
 
@@ -54,7 +52,7 @@ void ERR_vset_error(int lib, int reason, const char *fmt, va_list args)
     unsigned long flags = 0;
     size_t i;
 
-    es = ossl_err_get_state_int();
+    es = ossl_err_get_state_int(1);
     if (es == NULL)
         return;
     i = es->top;

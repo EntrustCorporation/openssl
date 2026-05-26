@@ -10,15 +10,18 @@ use strict;
 use OpenSSL::Test qw/:DEFAULT cmdstr srctop_file bldtop_dir/;
 use OpenSSL::Test::Utils;
 use TLSProxy::Proxy;
+use Cwd qw(abs_path);
 
 my $test_name = "test_tls13cookie";
 setup($test_name);
 
+$ENV{OPENSSL_MODULES} = abs_path(bldtop_dir("test"));
+
 plan skip_all => "TLSProxy isn't usable on $^O"
     if $^O =~ /^(VMS)$/;
 
-plan skip_all => "$test_name needs the dynamic engine feature enabled"
-    if disabled("engine") || disabled("dynamic-engine");
+plan skip_all => "$test_name needs the module feature enabled"
+    if disabled("module");
 
 plan skip_all => "$test_name needs the sock feature enabled"
     if disabled("sock");
@@ -28,17 +31,20 @@ plan skip_all => "$test_name needs TLS1.3 enabled"
 
 use constant {
     COOKIE_ONLY => 0,
-    COOKIE_AND_KEY_SHARE => 1
+    COOKIE_AND_KEY_SHARE => 1,
+    EMPTY_COOKIE => 2
 };
 
 my $proxy = TLSProxy::Proxy->new(
     undef,
     cmdstr(app(["openssl"]), display => 1),
     srctop_file("apps", "server.pem"),
-    (!$ENV{HARNESS_ACTIVE} || $ENV{HARNESS_VERBOSE})
+    (!$ENV{HARNESS_ACTIVE} || $ENV{HARNESS_VERBOSE}),
+    have_IPv6()
 );
 
 my $cookieseen = 0;
+my $fatal_alert = 0;
 my $testtype;
 
 #Test 1: Inserting a cookie into an HRR should see it echoed in the ClientHello
@@ -53,7 +59,7 @@ if (disabled("ecx")) {
     $proxy->serverflags("-curves X25519");
 }
 $proxy->start() or plan skip_all => "Unable to start up Proxy for tests";
-plan tests => 2;
+plan tests => 3;
 ok(TLSProxy::Message->success() && $cookieseen == 1, "Cookie seen");
 
 #Test 2: Inserting a cookie into an HRR should see it echoed in the ClientHello
@@ -68,18 +74,41 @@ SKIP: {
     ok(TLSProxy::Message->success() && $cookieseen == 1, "Cookie seen");
 }
 
+#Test 3: A client should reject an empty cookie in an HRR
+$testtype = EMPTY_COOKIE;
+$fatal_alert = 0;
+$proxy->clear();
+if (disabled("ecx")) {
+    $proxy->clientflags("-curves ffdhe3072:ffdhe2048");
+    $proxy->serverflags("-curves ffdhe2048");
+} else {
+    $proxy->clientflags("-curves P-256:X25519");
+    $proxy->serverflags("-curves X25519");
+}
+$proxy->start();
+ok($fatal_alert, "Empty cookie rejected");
+
 sub cookie_filter
 {
     my $proxy = shift;
 
+    if ($testtype == EMPTY_COOKIE && $proxy->flight == 2) {
+        $fatal_alert = 1
+            if @{$proxy->record_list}[-1]->is_fatal_alert(0)
+                == TLSProxy::Message::AL_DESC_DECODE_ERROR;
+        return;
+    }
+
     # We're only interested in the HRR and both ClientHellos
     return if ($proxy->flight > 2);
 
-    my $ext = pack "C8",
-        0x00, 0x06, #Cookie Length
-        0x00, 0x01, #Dummy cookie data (6 bytes)
-        0x02, 0x03,
-        0x04, 0x05;
+    my $ext = $testtype == EMPTY_COOKIE
+        ? pack("n", 0)
+        : pack("C8",
+            0x00, 0x06, #Cookie Length
+            0x00, 0x01, #Dummy cookie data (6 bytes)
+            0x02, 0x03,
+            0x04, 0x05);
 
     foreach my $message (@{$proxy->message_list}) {
         if ($message->mt == TLSProxy::Message::MT_SERVER_HELLO

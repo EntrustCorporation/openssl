@@ -1,4 +1,4 @@
-# Copyright 2022-2025 The OpenSSL Project Authors. All Rights Reserved.
+# Copyright 2022-2026 The OpenSSL Project Authors. All Rights Reserved.
 #
 # Licensed under the Apache License 2.0 (the "License").  You may not use
 # this file except in compliance with the License.  You can obtain a copy
@@ -23,13 +23,17 @@ jobs:
   zstd:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
+      with:
+        persist-credentials: false
     - name: checkout fuzz/corpora submodule
       run: git submodule update --init --depth 1 fuzz/corpora
     - name: install nasm
       run: |
         choco install nasm
         "C:\Program Files\NASM" | Out-File -FilePath "$env:GITHUB_PATH" -Append
+    - name: install jom
+      run:  choco install jom
     - name: prepare the build directory
       run: mkdir _build
     - name: Get zstd
@@ -48,7 +52,7 @@ jobs:
       shell: cmd
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-        nmake
+        jom /j4 /S
     - name: Gather openssl version info
       working-directory: _build
       run: |
@@ -61,7 +65,6 @@ jobs:
       run: |
         echo ${Env:OSSL_VERSION}
         reg.exe add HKLM\SOFTWARE\OpenSSL-${Env:OSSL_VERSION}-openssl /v OPENSSLDIR /t REG_EXPAND_SZ /d TESTOPENSSLDIR /reg:32
-        reg.exe add HKLM\SOFTWARE\OpenSSL-${Env:OSSL_VERSION}-openssl /v ENGINESDIR /t REG_EXPAND_SZ /d TESTOPENSSLDIR /reg:32
         reg.exe add HKLM\SOFTWARE\OpenSSL-${Env:OSSL_VERSION}-openssl /v MODULESDIR /t REG_EXPAND_SZ /d TESTOPENSSLDIR /reg:32
         reg.exe query HKLM\SOFTWARE\OpenSSL-${Env:OSSL_VERSION}-openssl /v OPENSSLDIR /reg:32
     - name: download coreinfo
@@ -75,26 +78,27 @@ jobs:
         7z.exe x coreinfo/Coreinfo.zip
         ./Coreinfo64.exe -accepteula -f
         ./apps/openssl.exe version -c
-    - name: Check platform symbol usage
-      run: |
-        perl ./util/checkplatformsyms.pl ./util/platform_symbols/windows-symbols.txt libcrypto-3-x64.dll ./libssl-3-x64.dll
     - name: test
       working-directory: _build
       shell: cmd
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-        nmake test VERBOSE_FAILURE=yes TESTS="-test_fuzz* -test_fipsload" HARNESS_JOBS=4
+        jom test VERBOSE_FAILURE=yes TESTS="-test_fuzz* -test_fipsload" HARNESS_JOBS=4
 
   brotli:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
+      with:
+        persist-credentials: false
     - name: checkout fuzz/corpora submodule
       run: git submodule update --init --depth 1 fuzz/corpora
     - name: install nasm
       run: |
         choco install nasm
         "C:\Program Files\NASM" | Out-File -FilePath "$env:GITHUB_PATH" -Append
+    - name: install jom
+      run:  choco install jom
     - name: prepare the build directory
       run: mkdir _build
     - name: Get brotli
@@ -113,7 +117,7 @@ jobs:
       shell: cmd
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-        nmake
+        jom /j4 /S
     - name: Gather openssl version info
       working-directory: _build
       run: |
@@ -126,7 +130,6 @@ jobs:
       run: |
         echo ${Env:OSSL_VERSION}
         reg.exe add HKLM\SOFTWARE\OpenSSL-${Env:OSSL_VERSION}-openssl /v OPENSSLDIR /t REG_EXPAND_SZ /d TESTOPENSSLDIR /reg:32
-        reg.exe add HKLM\SOFTWARE\OpenSSL-${Env:OSSL_VERSION}-openssl /v ENGINESDIR /t REG_EXPAND_SZ /d TESTOPENSSLDIR /reg:32
         reg.exe add HKLM\SOFTWARE\OpenSSL-${Env:OSSL_VERSION}-openssl /v MODULESDIR /t REG_EXPAND_SZ /d TESTOPENSSLDIR /reg:32
         reg.exe query HKLM\SOFTWARE\OpenSSL-${Env:OSSL_VERSION}-openssl /v OPENSSLDIR /reg:32
     - name: download coreinfo
@@ -145,4 +148,4 @@ jobs:
       shell: cmd
       run: |
         call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-        nmake test VERBOSE_FAILURE=yes TESTS="-test_fuzz* -test_fipsload" HARNESS_JOBS=4
+        jom test VERBOSE_FAILURE=yes TESTS="-test_fuzz* -test_fipsload" HARNESS_JOBS=4

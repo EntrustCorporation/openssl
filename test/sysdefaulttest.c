@@ -11,6 +11,7 @@
 #include <openssl/opensslconf.h>
 
 #include <string.h>
+#include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/ssl.h>
 #include <openssl/tls1.h>
@@ -35,17 +36,18 @@ static int test_func(void)
             TEST_info("min/max version setting incorrect");
             goto err;
         }
+        if (!TEST_long_eq(ERR_peek_error(), 0))
+            goto err;
     }
     ret = 1;
- err:
+err:
     SSL_CTX_free(ctx);
     return ret;
 }
 
 int global_init(void)
 {
-    if (!OPENSSL_init_ssl(OPENSSL_INIT_ENGINE_ALL_BUILTIN
-                          | OPENSSL_INIT_LOAD_CONFIG, NULL))
+    if (!OPENSSL_init_ssl(OPENSSL_INIT_LOAD_CONFIG, NULL))
         return 0;
     return 1;
 }

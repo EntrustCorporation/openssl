@@ -14,7 +14,7 @@
 #include "asn1_local.h"
 
 static int asn1_get_length(const unsigned char **pp, int *inf, long *rl,
-                           long max);
+    long max);
 static void asn1_put_length(unsigned char **pp, int length);
 
 static int _asn1_check_infinite_end(const unsigned char **p, long len)
@@ -44,7 +44,7 @@ int ASN1_const_check_infinite_end(const unsigned char **p, long len)
 }
 
 int ASN1_get_object(const unsigned char **pp, long *plength, int *ptag,
-                    int *pclass, long omax)
+    int *pclass, long omax)
 {
     int i, ret;
     long len;
@@ -101,7 +101,7 @@ int ASN1_get_object(const unsigned char **pp, long *plength, int *ptag,
     }
     *pp = p;
     return ret | inf;
- err:
+err:
     ERR_raise(ERR_LIB_ASN1, ASN1_R_HEADER_TOO_LONG);
     return 0x80;
 }
@@ -114,7 +114,7 @@ int ASN1_get_object(const unsigned char **pp, long *plength, int *ptag,
  * are stored most significant digit first.
  */
 static int asn1_get_length(const unsigned char **pp, int *inf, long *rl,
-                           long max)
+    long max)
 {
     const unsigned char *p = *pp;
     unsigned long ret = 0;
@@ -129,7 +129,7 @@ static int asn1_get_length(const unsigned char **pp, int *inf, long *rl,
         *inf = 0;
         i = *p & 0x7f;
         if (*p++ & 0x80) {
-            if (max < i + 1)
+            if (max < i)
                 return 0;
             /* Skip leading zeroes */
             while (i > 0 && *p == 0) {
@@ -158,7 +158,7 @@ static int asn1_get_length(const unsigned char **pp, int *inf, long *rl,
  * constructed == 2 for indefinite length constructed
  */
 void ASN1_put_object(unsigned char **pp, int constructed, int length, int tag,
-                     int xclass)
+    int xclass)
 {
     unsigned char *p = *pp;
     int i, ttag;
@@ -248,7 +248,7 @@ int ASN1_object_size(int constructed, int length, int tag)
     return ret + length;
 }
 
-void ossl_asn1_string_set_bits_left(ASN1_STRING *str, unsigned int num)
+void ossl_asn1_bit_string_set_unused_bits(ASN1_STRING *str, unsigned int num)
 {
     str->flags &= ~0x07;
     str->flags |= ASN1_STRING_FLAG_BITS_LEFT | (num & 0x07);
@@ -289,7 +289,11 @@ int ASN1_STRING_set(ASN1_STRING *str, const void *_data, int len_in)
     const char *data = _data;
     size_t len;
 
-    if (len_in < 0) {
+    if (len_in < -1) {
+        ERR_raise(ERR_LIB_ASN1, ASN1_R_TOO_SMALL);
+        return 0;
+    }
+    if (len_in == -1) {
         if (data == NULL)
             return 0;
         len = strlen(data);
@@ -424,16 +428,9 @@ const unsigned char *ASN1_STRING_get0_data(const ASN1_STRING *x)
     return x->data;
 }
 
-#ifndef OPENSSL_NO_DEPRECATED_1_1_0
-unsigned char *ASN1_STRING_data(ASN1_STRING *x)
-{
-    return x->data;
-}
-#endif
-
 /* |max_len| excludes NUL terminator and may be 0 to indicate no restriction */
 char *ossl_sk_ASN1_UTF8STRING2text(STACK_OF(ASN1_UTF8STRING) *text,
-                                   const char *sep, size_t max_len)
+    const char *sep, size_t max_len)
 {
     int i;
     ASN1_UTF8STRING *current;

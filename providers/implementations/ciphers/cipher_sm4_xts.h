@@ -7,14 +7,17 @@
  * https://www.openssl.org/source/license.html
  */
 
+#if !defined(OSSL_PROVIDERS_IMPLEMENTATIONS_CIPHERS_CIPHER_SM4_XTS_H)
+#define OSSL_PROVIDERS_IMPLEMENTATIONS_CIPHERS_CIPHER_SM4_XTS_H
+
 #include <crypto/sm4.h>
 #include "prov/ciphercommon.h"
 #include "crypto/sm4_platform.h"
 
 PROV_CIPHER_FUNC(void, xts_stream,
-                 (const unsigned char *in, unsigned char *out, size_t len,
-                  const SM4_KEY *key1, const SM4_KEY *key2,
-                  const unsigned char iv[16], const int enc));
+    (const unsigned char *in, unsigned char *out, size_t len,
+        const SM4_KEY *key1, const SM4_KEY *key2,
+        const unsigned char iv[16], const int enc));
 
 typedef struct prov_sm4_xts_ctx_st {
     /* Must be first */
@@ -44,3 +47,5 @@ typedef struct prov_sm4_xts_ctx_st {
 } PROV_SM4_XTS_CTX;
 
 const PROV_CIPHER_HW *ossl_prov_cipher_hw_sm4_xts(size_t keybits);
+
+#endif /* !defined(OSSL_PROVIDERS_IMPLEMENTATIONS_CIPHERS_CIPHER_SM4_XTS_H) */

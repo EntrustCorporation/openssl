@@ -1,4 +1,4 @@
-# Copyright 2016-2025 The OpenSSL Project Authors. All Rights Reserved.
+# Copyright 2016-2026 The OpenSSL Project Authors. All Rights Reserved.
 #
 # Licensed under the Apache License 2.0 (the "License").  You may not use
 # this file except in compliance with the License.  You can obtain a copy
@@ -73,6 +73,7 @@ use Cwd qw/getcwd abs_path/;
 use OpenSSL::Util;
 
 my $level = 0;
+my $idx = 0;
 
 # The name of the test.  This is set by setup() and is used in the other
 # functions to verify that setup() has been used.
@@ -328,8 +329,16 @@ sub app {
     return sub {
         my @cmdargs = ( @{$cmd} );
         my @prog = __fixup_prg(__apps_file(shift @cmdargs, __exeext()));
-        return cmd([ @prog, @cmdargs ],
-                   exe_shell => $ENV{EXE_SHELL}, %opts) -> (shift);
+        if (defined $ENV{OSSL_USE_VALGRIND}) {
+            $idx=$idx+1;
+            my $resultdir = result_dir();
+            my $srcdir = srctop_dir();
+            return cmd([ "valgrind", "--leak-check=full", "--show-leak-kinds=all", "--gen-suppressions=all", "--suppressions=$srcdir/util/valgrind.suppression", "--log-file=$resultdir/valgrind.log.$idx", "--suppressions=$srcdir/util/valgrind.suppression", @prog, @cmdargs ],
+                       exe_shell => $ENV{EXE_SHELL}, %opts) -> (shift);
+        } else {
+            return cmd([ @prog, @cmdargs ],
+                       exe_shell => $ENV{EXE_SHELL}, %opts) -> (shift);
+        }
     }
 }
 
@@ -350,8 +359,29 @@ sub test {
     return sub {
         my @cmdargs = ( @{$cmd} );
         my @prog = __fixup_prg(__test_file(shift @cmdargs, __exeext()));
-        return cmd([ @prog, @cmdargs ],
+        if (defined $ENV{OSSL_USE_VALGRIND}) {
+           $idx=$idx+1;
+           my $resultdir = result_dir();
+           my $srcdir = srctop_dir();
+           return cmd([ "valgrind", "--leak-check=full", "--show-leak-kinds=all", "--gen-suppressions=all", "--suppressions=$srcdir/util/valgrind.suppression", "--log-file=$resultdir/valgrind.log.$idx", "--suppressions=$srcdir/util/valgrind.suppression", @prog, @cmdargs ],
                    exe_shell => $ENV{EXE_SHELL}, %opts) -> (shift);
+        } elsif (defined $ENV{OSSL_VALGRIND_CT}) {
+           # Constant-time validation mode: mark secret data as undefined and
+           # fail immediately if any branch or memory index depends on it.
+           # Unlike OSSL_USE_VALGRIND this writes to stdout (not a log file)
+           # and uses --error-exitcode so the test fails on any CT violation.
+           # Set OSSL_VALGRIND_CT=yes when building with enable-ct-validation.
+           return cmd([ "valgrind",
+                        "--tool=memcheck",
+                        "--track-origins=yes",
+                        "--error-exitcode=1",
+                        "--num-callers=20",
+                        @prog, @cmdargs ],
+                   exe_shell => $ENV{EXE_SHELL}, %opts) -> (shift);
+        } else {
+            return cmd([ @prog, @cmdargs ],
+                   exe_shell => $ENV{EXE_SHELL}, %opts) -> (shift);
+        }
     }
 }
 

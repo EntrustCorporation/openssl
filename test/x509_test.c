@@ -1,5 +1,5 @@
 /*
- * Copyright 2022-2025 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2022-2026 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -10,6 +10,7 @@
 #define OPENSSL_SUPPRESS_DEPRECATED /* EVP_PKEY_get1/set1_RSA */
 
 #include <openssl/x509.h>
+#include <openssl/x509v3.h>
 #include <openssl/asn1.h>
 #include <openssl/evp.h>
 #include <openssl/rsa.h>
@@ -96,9 +97,24 @@ static int test_x509_tbs_cache(void)
     const unsigned char *p = certdata;
 
     ret = TEST_ptr(x = d2i_X509(NULL, &p, sizeof(certdata)))
-          && TEST_int_gt(X509_sign(x, privkey, signmd), 0)
-          && TEST_int_eq(X509_verify(x, pubkey), 1);
+        && TEST_int_gt(X509_sign(x, privkey, signmd), 0)
+        && TEST_int_eq(X509_verify(x, pubkey), 1);
     X509_free(x);
+    return ret;
+}
+
+static int test_x509_verify_with_new(void)
+{
+    int ret;
+    EVP_PKEY *pkey = NULL;
+    X509 *x = NULL;
+
+    ret = TEST_ptr(x = X509_new())
+        && TEST_ptr(pkey = EVP_PKEY_new())
+        && TEST_int_eq(X509_verify(x, pkey), -1)
+        && TEST_int_eq(X509_verify(x, pubkey), -1);
+    X509_free(x);
+    EVP_PKEY_free(pkey);
     return ret;
 }
 
@@ -114,8 +130,8 @@ static int test_x509_crl_tbs_cache(void)
     const unsigned char *p = crldata;
 
     ret = TEST_ptr(crl = d2i_X509_CRL(NULL, &p, sizeof(crldata)))
-          && TEST_int_gt(X509_CRL_sign(crl, privkey, signmd), 0)
-          && TEST_int_eq(X509_CRL_verify(crl, pubkey), 1);
+        && TEST_int_gt(X509_CRL_sign(crl, privkey, signmd), 0)
+        && TEST_int_eq(X509_CRL_verify(crl, pubkey), 1);
 
     X509_CRL_free(crl);
     return ret;
@@ -152,14 +168,16 @@ static int test_asn1_item_verify(void)
     X509_get0_signature(&sig, &alg, x509);
 
     if (!TEST_int_gt(ASN1_item_verify(ASN1_ITEM_rptr(X509_CINF),
-                                      (X509_ALGOR *)alg, (ASN1_BIT_STRING *)sig,
-                                      &x509->cert_info, pkey), 0))
+                         alg, sig,
+                         &x509->cert_info, pkey),
+            0))
         goto err;
 
     ERR_set_mark();
     if (!TEST_int_lt(ASN1_item_verify(ASN1_ITEM_rptr(X509_CINF),
-                                     (X509_ALGOR *)alg, (ASN1_BIT_STRING *)sig,
-                                     NULL, pkey), 0)) {
+                         alg, sig,
+                         NULL, pkey),
+            0)) {
         ERR_clear_last_mark();
         goto err;
     }
@@ -167,7 +185,7 @@ static int test_asn1_item_verify(void)
 
     ret = 1;
 
- err:
+err:
 #ifndef OPENSSL_NO_DEPRECATED_3_0
     RSA_free(rsa);
 #endif
@@ -229,7 +247,7 @@ static int test_x509_crl_delete_last_extension(void)
         /* There should now be an extension list. */
         || !TEST_ptr(X509_CRL_get0_extensions(crl))
         || !TEST_int_eq(sk_X509_EXTENSION_num(X509_CRL_get0_extensions(crl)),
-                        1))
+            1))
         goto err;
 
     /* Delete the extension. */
@@ -282,6 +300,256 @@ err:
     return ret;
 }
 
+static int test_drop_empty_cert_keyids(void)
+{
+    static const unsigned char commonName[] = "test";
+    BIO *bio = NULL;
+    CONF *conf = NULL;
+    X509 *x = NULL;
+    X509_NAME *subject = NULL;
+    X509_NAME_ENTRY *name_entry = NULL;
+    X509_EXTENSION *ext = NULL;
+    const STACK_OF(X509_EXTENSION) *exts;
+    X509V3_CTX ctx;
+    int ret = 0;
+
+    if (!TEST_ptr(x = X509_new())
+        || !TEST_int_eq(X509_set_version(x, X509_VERSION_3), 1)
+        || !TEST_int_eq(ASN1_INTEGER_set(X509_get_serialNumber(x), 1), 1)
+        || !TEST_ptr(subject = X509_NAME_new()))
+        goto err;
+
+    name_entry = X509_NAME_ENTRY_create_by_NID(NULL, NID_commonName,
+        MBSTRING_ASC, commonName, -1);
+    if (!TEST_ptr(name_entry)
+        || !TEST_int_eq(X509_NAME_add_entry(subject, name_entry, -1, 0), 1)
+        || !TEST_int_eq(X509_set_subject_name(x, subject), 1)
+        || !TEST_int_eq(X509_set_issuer_name(x, subject), 1)
+        || !TEST_ptr(X509_gmtime_adj(X509_getm_notBefore(x), 0))
+        || !TEST_ptr(X509_gmtime_adj(X509_getm_notAfter(x), 24 * 3600))
+        || !TEST_int_eq(X509_set_pubkey(x, pubkey), 1))
+        goto err;
+
+    /*
+     * Check that X509_add_ext() does not create non-NULL empty stack when
+     * adding an ignored extension (from initial NULL state).
+     */
+    X509V3_set_ctx(&ctx, x, x, NULL, NULL, X509V3_CTX_REPLACE);
+    if (!TEST_ptr(ext = X509V3_EXT_conf(NULL, &ctx, "subjectKeyIdentifier", "none"))
+        || !TEST_int_eq(X509_add_ext(x, ext, -1), 1)
+        || !TEST_ptr_null(X509_get0_extensions(x)))
+        goto err;
+
+    /* Add non-empty SKID */
+    if (!TEST_ptr(bio = BIO_new(BIO_s_mem()))
+        || !TEST_int_ge(BIO_printf(bio, "subjectKeyIdentifier = hash\n"), 0)
+        || !TEST_ptr(conf = NCONF_new(NULL))
+        || !TEST_int_gt(NCONF_load_bio(conf, bio, NULL), 0))
+        goto err;
+    (void)BIO_reset(bio);
+
+    X509V3_set_nconf(&ctx, conf);
+    if (!TEST_true(X509V3_EXT_add_nconf(conf, &ctx, "default", x))
+        || !TEST_ptr(exts = X509_get0_extensions(x))
+        || !TEST_int_eq(sk_X509_EXTENSION_num(exts), 1))
+        goto err;
+
+    /* Request "empty" SKID in order to drop any previous value */
+    NCONF_free(conf);
+    if (!TEST_ptr(conf = NCONF_new(NULL))
+        || !TEST_int_ge(BIO_printf(bio, "subjectKeyIdentifier = none\n"), 0)
+        || !TEST_int_gt(NCONF_load_bio(conf, bio, NULL), 0))
+        goto err;
+
+    X509V3_set_nconf(&ctx, conf);
+    if (!TEST_true(X509V3_EXT_add_nconf(conf, &ctx, "default", x))
+        || !TEST_int_gt(X509_sign(x, privkey, signmd), 0)
+        || !TEST_ptr_null(X509_get0_extensions(x)))
+        goto err;
+
+    /*
+     * Now check that a non-empty extension is actually added via
+     * X509_add_ext().
+     */
+    X509_EXTENSION_free(ext);
+    if (!TEST_ptr(ext = X509V3_EXT_conf(NULL, &ctx, "subjectKeyIdentifier", "hash"))
+        || !TEST_int_eq(X509_add_ext(x, ext, -1), 1)
+        || !TEST_int_gt(X509_sign(x, privkey, signmd), 0)
+        || !TEST_ptr(exts = X509_get0_extensions(x))
+        || !TEST_int_eq(sk_X509_EXTENSION_num(exts), 1))
+        goto err;
+
+    ret = 1;
+err:
+    BIO_free(bio);
+    NCONF_free(conf);
+    X509_NAME_ENTRY_free(name_entry);
+    X509_NAME_free(subject);
+    X509_EXTENSION_free(ext);
+    X509_free(x);
+    return ret;
+}
+
+static int test_drop_empty_csr_keyids(void)
+{
+    static const unsigned char commonName[] = "test";
+    BIO *bio = NULL;
+    CONF *conf = NULL;
+    X509_REQ *x = NULL;
+    X509_NAME *subject = NULL;
+    X509_NAME_ENTRY *name_entry = NULL;
+    X509_EXTENSION *ext = NULL;
+    STACK_OF(X509_EXTENSION) *exts = NULL;
+    X509V3_CTX ctx;
+    int ret = 0;
+
+    if (!TEST_ptr(x = X509_REQ_new())
+        || !TEST_int_eq(X509_REQ_set_version(x, X509_REQ_VERSION_1), 1)
+        || !TEST_ptr(subject = X509_NAME_new()))
+        goto err;
+
+    name_entry = X509_NAME_ENTRY_create_by_NID(NULL, NID_commonName,
+        MBSTRING_ASC, commonName, -1);
+    if (!TEST_ptr(name_entry)
+        || !TEST_int_eq(X509_NAME_add_entry(subject, name_entry, -1, 0), 1)
+        || !TEST_int_eq(X509_REQ_set_subject_name(x, subject), 1)
+        || !TEST_int_eq(X509_REQ_set_pubkey(x, pubkey), 1))
+        goto err;
+
+    /* Add non-empty SKID, CSRs have no issuer, so no AKID */
+    if (!TEST_ptr(bio = BIO_new(BIO_s_mem()))
+        || !TEST_int_ge(BIO_printf(bio, "subjectKeyIdentifier = hash\n"), 0)
+        || !TEST_ptr(conf = NCONF_new(NULL))
+        || !TEST_int_gt(NCONF_load_bio(conf, bio, NULL), 0))
+        goto err;
+    (void)BIO_reset(bio);
+
+    X509V3_set_ctx(&ctx, NULL, NULL, x, NULL, X509V3_CTX_REPLACE);
+    X509V3_set_nconf(&ctx, conf);
+    if (!TEST_true(X509V3_EXT_REQ_add_nconf(conf, &ctx, "default", x))
+        || !TEST_int_eq(X509_REQ_get_attr_count(x), 1)
+        || !TEST_ptr(exts = X509_REQ_get_extensions(x))
+        || !TEST_int_eq(sk_X509_EXTENSION_num(exts), 1))
+        goto err;
+    sk_X509_EXTENSION_pop_free(exts, X509_EXTENSION_free);
+    exts = NULL;
+
+    /* Request an "empty" SKID in order to drop the previous SKID */
+    NCONF_free(conf);
+    if (!TEST_ptr(conf = NCONF_new(NULL))
+        || !TEST_int_ge(BIO_printf(bio, "subjectKeyIdentifier = none\n"), 0)
+        || !TEST_int_gt(NCONF_load_bio(conf, bio, NULL), 0))
+        goto err;
+
+    X509V3_set_nconf(&ctx, conf);
+    if (!TEST_true(X509V3_EXT_REQ_add_nconf(conf, &ctx, "default", x))
+        || !TEST_int_gt(X509_REQ_sign(x, privkey, signmd), 0)
+        || !TEST_int_eq(X509_REQ_get_attr_count(x), 0))
+        goto err;
+
+    ret = 1;
+
+err:
+    BIO_free(bio);
+    NCONF_free(conf);
+    X509_NAME_ENTRY_free(name_entry);
+    X509_NAME_free(subject);
+    X509_EXTENSION_free(ext);
+    sk_X509_EXTENSION_pop_free(exts, X509_EXTENSION_free);
+    X509_REQ_free(x);
+    return ret;
+}
+
+/*
+ * TPM 1.2 Endorsement Key certificate with a NID_rsaesOaep
+ * SubjectPublicKeyInfo AlgorithmIdentifier (per TCG Credential
+ * Profiles V1.2 section 3.2.7).  The AlgorithmIdentifier carries
+ * a TCG-specific pSourceAlgorithm ("TCPA") in its parameters,
+ * which we deliberately do not interpret.  The key body itself
+ * is a standard RSAPublicKey.
+ */
+static const char *kRsaesOaepCert[] = {
+    "-----BEGIN CERTIFICATE-----\n",
+    "MIIDhDCCAmygAwIBAgIUBchBXcXPAWxNMJEsLXEXHv/eVZswDQYJKoZIhvcNAQEL\n",
+    "BQAwVTELMAkGA1UEBhMCQ0gxHjAcBgNVBAoTFVNUTWljcm9lbGVjdHJvbmljcyBO\n",
+    "VjEmMCQGA1UEAxMdU1RNIFRQTSBFSyBJbnRlcm1lZGlhdGUgQ0EgMDIwHhcNMjEw\n",
+    "OTA0MDAwMDAwWhcNMzEwOTA0MDAwMDAwWjAAMIIBNzAiBgkqhkiG9w0BAQcwFaIT\n",
+    "MBEGCSqGSIb3DQEBCQQEVENQQQOCAQ8AMIIBCgKCAQEAxpd3DnecpD87acEsYp4J\n",
+    "stM2q5Ss3CkjAP2Ei8yGjbO6DG/6WBIZjTdI5RfIcInoqN4QMso94vm8VqijdRI+\n",
+    "Zo5hLTCPLKXYwa6UG5yIPZ3ENQdhgZWeEPWe+pp9VUwz8wi78Ifk+CCV6Xp/5kQi\n",
+    "DCsR+RYbOVb9QgR6kjq+cx1z8YFp5u+k3Pl9tMq9xgIp5E6hT2MaS12KnoN8+hYI\n",
+    "mfCYVnpzBeQaHDp1KUoyDK6xGt86VxB0QyRbniHI38qgQL6qhO7z96aQ0pNGoQde\n",
+    "QUxFf/sETurQ5zSf+3btnS8afjxdVBKzj3isv5BaQrt0mdB7+3XWD+ASda33SY12\n",
+    "6wIDAQABo4GLMIGIMB8GA1UdIwQYMBaAFFcfgGtHzOeb+jWUfO2IuNEAWuCeMEIG\n",
+    "A1UdIAQ7MDkwNwYEVR0gADAvMC0GCCsGAQUFBwIBFiFodHRwOi8vd3d3LnN0LmNv\n",
+    "bS9UUE0vcmVwb3NpdG9yeS8wDAYDVR0TAQH/BAIwADATBgNVHSUBAf8ECTAHBgVn\n",
+    "gQUIATANBgkqhkiG9w0BAQsFAAOCAQEAMOhFPNcebyCRFOBztlWhmDb2DHTCD0nC\n",
+    "DVobH4WZJXGf4bkYNO3mOLyWtHEVzb36kiq7enh3f/eGhDPwKB8axlozpR5KAvER\n",
+    "szKNO8iLGOjuYzI2A4DazkttczFfzSB9QDgJrwTNEfIJtwRm2HQSiL0zzuEQOnaS\n",
+    "UWyt/iKn4/34BjEeaw4/Ld7+f06LXqSr18SUr0LTB2kk+Zzf0Och1C+G1CNLgJMM\n",
+    "MNQikAv0xdaOMX3HzA+phFlLbw/x8sboMlzmrbr92a/4Fp5WvmOSHH3ciwTtbAQn\n",
+    "A2TfExNOaKD2BG5FnB7c66puw2/yVxhveocQYgmT9XtMrNX00vEZJQ==\n",
+    "-----END CERTIFICATE-----\n",
+    NULL
+};
+
+/*
+ * Verify that a SubjectPublicKeyInfo with an id-RSAES-OAEP
+ * AlgorithmIdentifier decodes to an RSA EVP_PKEY via both the
+ * provider decoder path (exercised by X509_from_strings() +
+ * X509_get0_pubkey()) and the legacy type-specific path
+ * (exercised by d2i_RSA_PUBKEY() when available).
+ */
+static int test_rsaesoaep_spki(void)
+{
+    int ret = 0;
+    X509 *cert = NULL;
+    EVP_PKEY *pkey = NULL;
+#ifndef OPENSSL_NO_DEPRECATED_3_0
+    const X509_PUBKEY *xpk = NULL;
+    unsigned char *spki_der = NULL, *q;
+    const unsigned char *p;
+    int spki_len;
+    RSA *rsa = NULL;
+#endif
+
+    /* Provider / OSSL_DECODER path. */
+    if (!TEST_ptr(cert = X509_from_strings(kRsaesOaepCert))
+        || !TEST_ptr(pkey = X509_get0_pubkey(cert))
+        || !TEST_int_eq(EVP_PKEY_get_base_id(pkey), EVP_PKEY_RSA)
+        || !TEST_int_ge(EVP_PKEY_get_bits(pkey), 2048))
+        goto err;
+
+#ifndef OPENSSL_NO_DEPRECATED_3_0
+    /*
+     * Legacy path: d2i_RSA_PUBKEY() routes through
+     * ossl_d2i_PUBKEY_legacy() which sets flag_force_legacy=1,
+     * so this exercises the NID_rsaesOaep -> NID_rsaEncryption
+     * remap in x509_pubkey_decode().
+     */
+    if (!TEST_ptr(xpk = X509_get_X509_PUBKEY(cert))
+        || !TEST_int_gt((spki_len = i2d_X509_PUBKEY(xpk, NULL)), 0)
+        || !TEST_ptr(spki_der = OPENSSL_malloc(spki_len)))
+        goto err;
+    q = spki_der;
+    if (!TEST_int_eq(i2d_X509_PUBKEY(xpk, &q), spki_len))
+        goto err;
+    p = spki_der;
+    if (!TEST_ptr(rsa = d2i_RSA_PUBKEY(NULL, &p, spki_len))
+        || !TEST_int_ge(RSA_bits(rsa), 2048))
+        goto err;
+#endif
+
+    ret = 1;
+err:
+#ifndef OPENSSL_NO_DEPRECATED_3_0
+    RSA_free(rsa);
+    OPENSSL_free(spki_der);
+#endif
+    X509_free(cert);
+    return ret;
+}
+
 OPT_TEST_DECLARE_USAGE("<pss-self-signed-cert.pem>\n")
 
 int setup_tests(void)
@@ -319,6 +587,10 @@ int setup_tests(void)
     ADD_TEST(test_x509_delete_last_extension);
     ADD_TEST(test_x509_crl_delete_last_extension);
     ADD_TEST(test_x509_revoked_delete_last_extension);
+    ADD_TEST(test_drop_empty_cert_keyids);
+    ADD_TEST(test_drop_empty_csr_keyids);
+    ADD_TEST(test_rsaesoaep_spki);
+    ADD_TEST(test_x509_verify_with_new);
     return 1;
 }
 

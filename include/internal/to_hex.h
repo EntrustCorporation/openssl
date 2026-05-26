@@ -8,8 +8,10 @@
  */
 
 #ifndef OSSL_INTERNAL_TO_HEX_H
-# define OSSL_INTERNAL_TO_HEX_H
-# pragma once
+#define OSSL_INTERNAL_TO_HEX_H
+#pragma once
+
+#include <openssl/e_os2.h>
 
 static ossl_inline size_t to_hex(char *buf, uint8_t n, const char hexdig[17])
 {

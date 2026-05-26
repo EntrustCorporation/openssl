@@ -7,11 +7,14 @@
  * https://www.openssl.org/source/license.html
  */
 
+#if !defined(OSSL_PROVIDERS_IMPLEMENTATIONS_CIPHERS_CIPHER_RC4_H)
+#define OSSL_PROVIDERS_IMPLEMENTATIONS_CIPHERS_CIPHER_RC4_H
+
 #include <openssl/rc4.h>
 #include "prov/ciphercommon.h"
 
 typedef struct prov_rc4_ctx_st {
-    PROV_CIPHER_CTX base;      /* Must be first */
+    PROV_CIPHER_CTX base; /* Must be first */
     union {
         OSSL_UNION_ALIGN;
         RC4_KEY ks;
@@ -19,3 +22,5 @@ typedef struct prov_rc4_ctx_st {
 } PROV_RC4_CTX;
 
 const PROV_CIPHER_HW *ossl_prov_cipher_hw_rc4(size_t keybits);
+
+#endif /* !defined(OSSL_PROVIDERS_IMPLEMENTATIONS_CIPHERS_CIPHER_RC4_H) */

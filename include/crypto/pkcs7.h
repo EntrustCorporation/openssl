@@ -8,8 +8,10 @@
  */
 
 #ifndef OSSL_CRYPTO_PKCS7_H
-# define OSSL_CRYPTO_PKCS7_H
-# pragma once
+#define OSSL_CRYPTO_PKCS7_H
+#pragma once
+
+#include <openssl/pkcs7.h>
 
 void ossl_pkcs7_resolve_libctx(PKCS7 *p7);
 

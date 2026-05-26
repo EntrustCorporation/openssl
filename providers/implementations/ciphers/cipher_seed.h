@@ -7,11 +7,14 @@
  * https://www.openssl.org/source/license.html
  */
 
+#if !defined(OSSL_PROVIDERS_IMPLEMENTATIONS_CIPHERS_CIPHER_SEED_H)
+#define OSSL_PROVIDERS_IMPLEMENTATIONS_CIPHERS_CIPHER_SEED_H
+
 #include <openssl/seed.h>
 #include "prov/ciphercommon.h"
 
 typedef struct prov_seed_ctx_st {
-    PROV_CIPHER_CTX base;      /* Must be first */
+    PROV_CIPHER_CTX base; /* Must be first */
     union {
         OSSL_UNION_ALIGN;
         SEED_KEY_SCHEDULE ks;
@@ -22,3 +25,5 @@ const PROV_CIPHER_HW *ossl_prov_cipher_hw_seed_cbc(size_t keybits);
 const PROV_CIPHER_HW *ossl_prov_cipher_hw_seed_ecb(size_t keybits);
 const PROV_CIPHER_HW *ossl_prov_cipher_hw_seed_ofb128(size_t keybits);
 const PROV_CIPHER_HW *ossl_prov_cipher_hw_seed_cfb128(size_t keybits);
+
+#endif /* !defined(OSSL_PROVIDERS_IMPLEMENTATIONS_CIPHERS_CIPHER_SEED_H) */

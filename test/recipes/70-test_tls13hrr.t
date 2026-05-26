@@ -11,6 +11,7 @@ use OpenSSL::Test qw/:DEFAULT cmdstr srctop_file bldtop_dir/;
 use OpenSSL::Test::Utils;
 use TLSProxy::Proxy;
 use TLSProxy::Message;
+use Cwd qw(abs_path);
 
 my $test_name = "test_tls13hrr";
 setup($test_name);
@@ -18,8 +19,8 @@ setup($test_name);
 plan skip_all => "TLSProxy isn't usable on $^O"
     if $^O =~ /^(VMS)$/;
 
-plan skip_all => "$test_name needs the dynamic engine feature enabled"
-    if disabled("engine") || disabled("dynamic-engine");
+plan skip_all => "$test_name needs the module feature enabled"
+    if disabled("module");
 
 plan skip_all => "$test_name needs the sock feature enabled"
     if disabled("sock");
@@ -27,11 +28,14 @@ plan skip_all => "$test_name needs the sock feature enabled"
 plan skip_all => "$test_name needs TLS1.3 enabled"
     if disabled("tls1_3") || (disabled("ec") && disabled("dh"));
 
+$ENV{OPENSSL_MODULES} = abs_path(bldtop_dir("test"));
+
 my $proxy = TLSProxy::Proxy->new(
     undef,
     cmdstr(app(["openssl"]), display => 1),
     srctop_file("apps", "server.pem"),
-    (!$ENV{HARNESS_ACTIVE} || $ENV{HARNESS_VERBOSE})
+    (!$ENV{HARNESS_ACTIVE} || $ENV{HARNESS_VERBOSE}),
+    have_IPv6()
 );
 
 use constant {
@@ -173,7 +177,6 @@ sub hrr_filter
             $hrr_record->content_type(),
             $hrr_record->version(),
             $hrr_record->len(),
-            $hrr_record->sslv2(),
             $hrr_record->len_real(),
             $hrr_record->decrypt_len(),
             $hrr_record->data(),

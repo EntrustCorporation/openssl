@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2025 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2026 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -15,7 +15,6 @@
 #include <openssl/bio.h>
 #include <openssl/configuration.h>
 
-
 int BIO_printf(BIO *bio, const char *format, ...)
 {
     va_list args;
@@ -29,7 +28,7 @@ int BIO_printf(BIO *bio, const char *format, ...)
     return ret;
 }
 
-#if defined(_WIN32)
+#if defined(_MSC_VER) && _MSC_VER < 1900
 /*
  * _MSC_VER described here:
  * https://learn.microsoft.com/en-us/cpp/overview/compiler-versions?view=msvc-170
@@ -54,10 +53,10 @@ static int msvc_bio_vprintf(BIO *bio, const char *format, va_list args)
     char *abuf;
     int ret, sz;
 
-    sz = _vsnprintf_s(buf, sizeof (buf), _TRUNCATE, format, args);
+    sz = _vsnprintf_s(buf, sizeof(buf), _TRUNCATE, format, args);
     if (sz == -1) {
         sz = _vscprintf(format, args) + 1;
-        abuf = (char *) OPENSSL_malloc(sz);
+        abuf = (char *)OPENSSL_malloc(sz);
         if (abuf == NULL) {
             ret = -1;
         } else {
@@ -71,7 +70,9 @@ static int msvc_bio_vprintf(BIO *bio, const char *format, va_list args)
 
     return ret;
 }
+#endif
 
+#ifdef _MSC_VER
 /*
  * This function is for unit test on windows only when built with Visual Studio
  */
@@ -86,13 +87,12 @@ int ossl_BIO_snprintf_msvc(char *buf, size_t n, const char *format, ...)
 
     return ret;
 }
-
 #endif
 
 int BIO_vprintf(BIO *bio, const char *format, va_list args)
 {
     va_list cp_args;
-#if !defined(_MSC_VER) || _MSC_VER > 1900
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
     int sz;
 #endif
     int ret = -1;
@@ -109,11 +109,11 @@ int BIO_vprintf(BIO *bio, const char *format, va_list args)
      * call to vsnprintf() here uses args we got in function argument.
      * The second call is going to use cp_args we made earlier.
      */
-    sz = vsnprintf(buf, sizeof (buf), format, args);
+    sz = vsnprintf(buf, sizeof(buf), format, args);
     if (sz >= 0) {
-        if ((size_t)sz > sizeof (buf)) {
+        if ((size_t)sz > sizeof(buf)) {
             sz += 1;
-            abuf = (char *) OPENSSL_malloc(sz);
+            abuf = (char *)OPENSSL_malloc(sz);
             if (abuf == NULL) {
                 ret = -1;
             } else {
@@ -122,8 +122,8 @@ int BIO_vprintf(BIO *bio, const char *format, va_list args)
                 OPENSSL_free(abuf);
             }
         } else {
-             /* vsnprintf returns length not including nul-terminator */
-             ret = BIO_write(bio, buf, sz);
+            /* vsnprintf returns length not including nul-terminator */
+            ret = BIO_write(bio, buf, sz);
         }
     }
 #endif

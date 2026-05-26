@@ -49,6 +49,13 @@ if (!$avx512vaes && `$ENV{CC} -v 2>&1`
     }
 }
 
+if (!$avx512vaes && `$ENV{CC} -x c /dev/null -dM -E|grep __clang_major__`
+    =~ /#define __clang_major__.([0-9]+)/) {
+    if ($1) {
+        $avx512vaes = ($1>=11); #icx started with clang 11
+    }
+}
+
 open OUT,"| \"$^X\" \"$xlate\" $flavour \"$output\""
     or die "can't call $xlate: $!";
 *STDOUT=*OUT;
@@ -499,8 +506,8 @@ $code.=<<___;
     and \$0x0F,%al                   # wrap-around $num in a 16-byte block
 
     leaq ($num,$ivp),%r11            # process $left iv bytes
-    vmovdqu8 (%r11),%xmm0
-    vmovdqu8 ($inp),%xmm1            # process $left input bytes
+    vmovdqu8 (%r11),%xmm0{%k1}{z}
+    vmovdqu8 ($inp),%xmm1{%k1}{z}    # process $left input bytes
     vpxor %xmm0,%xmm1,%xmm2          # CipherFeedBack XOR
     vmovdqu8 %xmm2,($out){%k1}       # write $left output bytes
     vmovdqu8 %xmm2,(%r11){%k1}       # blend $left output bytes into iv
@@ -753,8 +760,8 @@ $code.=<<___;
     and \$0x0F,%al                    # wrap-around in a 16-byte block
 
     leaq ($num,$ivp),%r11             # process $left iv bytes
-    vmovdqu8 (%r11),%xmm0
-    vmovdqu8 ($inp),%xmm1             # process $left input bytes
+    vmovdqu8 (%r11),%xmm0{%k1}{z}
+    vmovdqu8 ($inp),%xmm1{%k1}{z}     # process $left input bytes
     vpxor %xmm0,%xmm1,%xmm2           # CipherFeedBack XOR
     vmovdqu8 %xmm2,($out){%k1}        # write $left output bytes
     vmovdqu8 %xmm1,(%r11){%k1}        # blend $left input bytes into iv

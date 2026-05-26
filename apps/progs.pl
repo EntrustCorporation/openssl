@@ -19,7 +19,10 @@ die "Unrecognised option, must be -C or -H\n"
     unless ($opt eq '-H' || $opt eq '-C');
 
 my %commands     = ();
-my $cmdre        = qr/^\s*int\s+([a-z_][a-z0-9_]*)_main\(\s*int\s+argc\s*,/;
+# I think it is best reconsidered in favour of just a table
+# of commands instead of this fragile regex. There really are not that
+# many commands.
+my $cmdre        = qr/^\s*(int\s+|)\s*([a-z_][a-z0-9_]*)_main\s*\(\s*int\s+argc\s*,/;
 my $apps_openssl = shift @ARGV;
 my $YEAR         = [gmtime($ENV{SOURCE_DATE_EPOCH} || time())]->[5] + 1900;
 
@@ -36,7 +39,7 @@ foreach my $filename (@openssl_source) {
     open F, $filename or die "Couldn't open $filename: $!\n";
     foreach ( grep /$cmdre/, <F> ) {
         my @foo = /$cmdre/;
-        $commands{$1} = 1;
+        $commands{$2} = 1;
     }
     close F;
 }
@@ -57,6 +60,9 @@ if ($opt eq '-H') {
  * https://www.openssl.org/source/license.html
  */
 
+#if !defined(OSSL_APPS_PROGS_H)
+#define OSSL_APPS_PROGS_H
+
 #include "function.h"
 
 EOF
@@ -71,6 +77,7 @@ EOF
     }
     print "\n";
     print "extern FUNCTION functions[];\n";
+    print "\n#endif /* !defined(OSSL_APPS_PROGS_H) */\n";
 }
 
 if ($opt eq '-C') {

@@ -724,7 +724,7 @@ ___
 	my ($sve2flag) = ("x7");
 
 $code.=<<___;
-#include "arm_arch.h"
+#include "arch/arm_arch.h"
 
 .arch   armv8-a
 
@@ -756,7 +756,7 @@ ChaCha20_ctr32_sve:
 	mov	$sve2flag,0
 	adrp	$tmp,OPENSSL_armcap_P
 	ldr	$tmpw,[$tmp,#:lo12:OPENSSL_armcap_P]
-	tst	$tmpw,#ARMV8_SVE2
+	tst	$tmpw,#ARMV9_SVE2
 	b.eq	1f
 	mov	$sve2flag,1
 	b	2f

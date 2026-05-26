@@ -7,12 +7,18 @@
  * https://www.openssl.org/source/license.html
  */
 
-#ifdef FIPS_MODULE
-# include <openssl/types.h>
+#if !defined(OSSL_PROVIDERS_FIPS_INCLUDE_FIPSCOMMON_H)
+#define OSSL_PROVIDERS_FIPS_INCLUDE_FIPSCOMMON_H
 
-# define OSSL_FIPS_PARAM(structname, paramname, unused) \
-    int ossl_fips_config_##structname(OSSL_LIB_CTX *libctx);
-# include "fips_indicator_params.inc"
-# undef OSSL_FIPS_PARAM
+#ifdef FIPS_MODULE
+#include <openssl/types.h>
+
+#define FIPSPARAMS_AS_HEADER
+#include "providers/fips/fipsparams.inc"
+#undef FIPSPARAMS_AS_HEADER
+
+int ossl_fips_config(OSSL_LIB_CTX *libctx, enum fips_config_id id);
 
 #endif
+
+#endif /* !defined(OSSL_PROVIDERS_FIPS_INCLUDE_FIPSCOMMON_H) */

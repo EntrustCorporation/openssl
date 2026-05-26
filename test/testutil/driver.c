@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2023 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2016-2026 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the Apache License 2.0 (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -17,24 +17,28 @@
 #include "internal/nelem.h"
 #include <openssl/bio.h>
 
-#include "platform.h"            /* From libapps */
+#include "platform.h" /* From libapps */
+
+#include "mfail.h"
+#include <time.h>
 
 #if defined(_WIN32) && !defined(__BORLANDC__)
-# define strdup _strdup
+#define strdup _strdup
 #endif
-
 
 /*
  * Declares the structures needed to register each test case function.
  */
 typedef struct test_info {
     const char *test_case_name;
-    int (*test_fn) (void);
+    int (*test_fn)(void);
     int (*param_test_fn)(int idx);
     int num;
 
     /* flags */
-    int subtest:1;
+    unsigned int subtest : 1;
+    unsigned int mfail : 1;
+    int mfail_flags;
 } TEST_INFO;
 
 static TEST_INFO all_tests[1024];
@@ -55,8 +59,7 @@ static int num_test_cases = 0;
 
 static int process_shared_options(void);
 
-
-void add_test(const char *test_case_name, int (*test_fn) (void))
+void add_test(const char *test_case_name, int (*test_fn)(void))
 {
     assert(num_tests != OSSL_NELEM(all_tests));
     all_tests[num_tests].test_case_name = test_case_name;
@@ -66,8 +69,8 @@ void add_test(const char *test_case_name, int (*test_fn) (void))
     ++num_test_cases;
 }
 
-void add_all_tests(const char *test_case_name, int(*test_fn)(int idx),
-                   int num, int subtest)
+void add_all_tests(const char *test_case_name, int (*test_fn)(int idx),
+    int num, int subtest)
 {
     assert(num_tests != OSSL_NELEM(all_tests));
     all_tests[num_tests].test_case_name = test_case_name;
@@ -79,6 +82,18 @@ void add_all_tests(const char *test_case_name, int(*test_fn)(int idx),
         ++num_test_cases;
     else
         num_test_cases += num;
+}
+
+void add_mfail_test(const char *test_case_name, int (*test_fn)(void), int flags)
+{
+    assert(num_tests != OSSL_NELEM(all_tests));
+    all_tests[num_tests].test_case_name = test_case_name;
+    all_tests[num_tests].test_fn = test_fn;
+    all_tests[num_tests].num = -1;
+    all_tests[num_tests].mfail = 1;
+    all_tests[num_tests].mfail_flags = flags;
+    ++num_tests;
+    ++num_test_cases;
 }
 
 static int gcd(int a, int b)
@@ -98,7 +113,6 @@ static void set_seed(int s)
         seed = (int)time(NULL);
     test_random_seed(seed);
 }
-
 
 int setup_test_framework(int argc, char *argv[])
 {
@@ -132,7 +146,6 @@ int setup_test_framework(int argc, char *argv[])
     return 1;
 }
 
-
 /*
  * This can only be called after setup() has run, since num_tests and
  * all_tests[] are setup at this point
@@ -151,7 +164,6 @@ static int check_single_test_params(char *name, char *testname, char *itname)
             single_test = atoi(name);
     }
 
-
     /* if only iteration is specified, assume we want the first test */
     if (single_test == -1 && single_iter != -1)
         single_test = 1;
@@ -160,24 +172,24 @@ static int check_single_test_params(char *name, char *testname, char *itname)
         if (single_test < 1 || single_test > num_tests) {
             test_printf_stderr("Invalid -%s value "
                                "(Value must be a valid test name OR a value between %d..%d)\n",
-                               testname, 1, num_tests);
+                testname, 1, num_tests);
             return 0;
         }
     }
     if (single_iter != -1) {
         if (all_tests[single_test - 1].num == -1) {
             test_printf_stderr("-%s option is not valid for test %d:%s\n",
-                               itname,
-                               single_test,
-                               all_tests[single_test - 1].test_case_name);
+                itname,
+                single_test,
+                all_tests[single_test - 1].test_case_name);
             return 0;
         } else if (single_iter < 1
-                   || single_iter > all_tests[single_test - 1].num) {
+            || single_iter > all_tests[single_test - 1].num) {
             test_printf_stderr("Invalid -%s value for test %d:%s\t"
                                "(Value must be in the range %d..%d)\n",
-                               itname, single_test,
-                               all_tests[single_test - 1].test_case_name,
-                               1, all_tests[single_test - 1].num);
+                itname, single_test,
+                all_tests[single_test - 1].test_case_name,
+                1, all_tests[single_test - 1].num);
             return 0;
         }
     }
@@ -236,7 +248,6 @@ end:
     return ret;
 }
 
-
 int pulldown_test_framework(int ret)
 {
     set_test_title(NULL);
@@ -259,8 +270,9 @@ void set_test_title(const char *title)
     test_title = title == NULL ? NULL : strdup(title);
 }
 
-PRINTF_FORMAT(2, 3) static void test_verdict(int verdict,
-                                             const char *description, ...)
+PRINTF_FORMAT(2, 3)
+static void test_verdict(int verdict,
+    const char *description, ...)
 {
     va_list ap;
 
@@ -281,6 +293,64 @@ PRINTF_FORMAT(2, 3) static void test_verdict(int verdict,
         test_printf_tapout(" # skipped");
     test_printf_tapout("\n");
     test_flush_tapout();
+}
+
+static double mfail_elapsed_secs(clock_t start)
+{
+    return (double)(clock() - start) / CLOCKS_PER_SEC;
+}
+
+static int mfail_should_skip(void)
+{
+    if (!mfail_is_installed())
+        return 1;
+    return mfail_env_skip_all();
+}
+
+static int mfail_run_test(const char *test_case_name,
+    int (*test_fn)(void), int flags)
+{
+    int ret = 1;
+    int no_check = (flags & MFAIL_TEST_NO_CHECK) != 0;
+    clock_t start = clock();
+
+    mfail_init(0, 0);
+
+    while (mfail_has_next()) {
+        int rv;
+
+        ERR_clear_error();
+        rv = test_fn();
+
+        if (mfail_was_triggered()) {
+            if (!no_check && !TEST_int_eq(rv, 0)) {
+                TEST_error("mfail test '%s': allocation failure at point %d "
+                           "not handled",
+                    test_case_name, mfail_get_point());
+                ret = 0;
+            }
+        } else if (mfail_get_mode() == MFAIL_MODE_SINGLE) {
+            TEST_info("mfail test '%s': point %d is beyond the last "
+                      "allocation point, test %s",
+                test_case_name, mfail_get_point(),
+                rv == 1 ? "succeeded" : "failed");
+        } else if (!TEST_int_eq(rv, 1)) {
+            TEST_error("mfail test '%s': no injection but test failed",
+                test_case_name);
+            ret = 0;
+        }
+    }
+
+    if (ret != 0 && mfail_was_slow_skipped())
+        return TEST_skip("mfail test '%s': %d allocations exceeds slow "
+                         "threshold %d",
+            test_case_name, mfail_get_total(),
+            mfail_get_slow_threshold());
+
+    TEST_info("mfail test '%s': %d allocations, %d iterations, %.6f seconds",
+        test_case_name, mfail_get_total(), mfail_iterations(),
+        mfail_elapsed_secs(start));
+    return ret;
 }
 
 int run_tests(const char *test_prog_name)
@@ -323,23 +393,29 @@ int run_tests(const char *test_prog_name)
     for (ii = 0; ii != num_tests; ++ii) {
         i = permute[ii];
 
-        if (single_test != -1 && ((i+1) != single_test)) {
+        if (single_test != -1 && ((i + 1) != single_test)) {
             continue;
-        }
-        else if (show_list) {
+        } else if (show_list) {
             if (all_tests[i].num != -1) {
                 test_printf_tapout("%d - %s (%d..%d)\n", ii + 1,
-                                   all_tests[i].test_case_name, 1,
-                                   all_tests[i].num);
+                    all_tests[i].test_case_name, 1,
+                    all_tests[i].num);
             } else {
                 test_printf_tapout("%d - %s\n", ii + 1,
-                                   all_tests[i].test_case_name);
+                    all_tests[i].test_case_name);
             }
             test_flush_tapout();
         } else if (all_tests[i].num == -1) {
             set_test_title(all_tests[i].test_case_name);
             ERR_clear_error();
-            verdict = all_tests[i].test_fn();
+            if (all_tests[i].mfail)
+                if (mfail_should_skip())
+                    verdict = TEST_skip("mfail test skipped");
+                else
+                    verdict = mfail_run_test(all_tests[i].test_case_name,
+                        all_tests[i].test_fn, all_tests[i].mfail_flags);
+            else
+                verdict = all_tests[i].test_fn();
             finalize(verdict != 0);
             test_verdict(verdict, "%d - %s", test_case_count + 1, test_title);
             if (verdict == 0)
@@ -386,11 +462,11 @@ int run_tests(const char *test_prog_name)
 
                 if (all_tests[i].subtest)
                     test_verdict(v, "%d - iteration %d",
-                                 subtest_case_count + 1, j + 1);
+                        subtest_case_count + 1, j + 1);
                 else
                     test_verdict(v, "%d - %s - iteration %d",
-                                 test_case_count + subtest_case_count + 1,
-                                 test_title, j + 1);
+                        test_case_count + subtest_case_count + 1,
+                        test_title, j + 1);
                 subtest_case_count++;
             }
 
@@ -402,7 +478,7 @@ int run_tests(const char *test_prog_name)
                 ++num_failed;
             if (all_tests[i].num == -1 || all_tests[i].subtest)
                 test_verdict(verdict, "%d - %s", test_case_count + 1,
-                             all_tests[i].test_case_name);
+                    all_tests[i].test_case_name);
             test_case_count++;
         }
     }
@@ -438,13 +514,13 @@ char *glue_strings(const char *list[], size_t *out_len)
 
 char *test_mk_file_path(const char *dir, const char *file)
 {
-# ifndef OPENSSL_SYS_VMS
+#ifndef OPENSSL_SYS_VMS
     const char *sep = "/";
-# else
+#else
     const char *sep = "";
     char *dir_end;
     char dir_end_sep;
-# endif
+#endif
     size_t dirlen = dir != NULL ? strlen(dir) : 0;
     size_t len = dirlen + strlen(sep) + strlen(file) + 1;
     char *full_file = OPENSSL_zalloc(len);
@@ -452,7 +528,7 @@ char *test_mk_file_path(const char *dir, const char *file)
     if (full_file != NULL) {
         if (dir != NULL && dirlen > 0) {
             OPENSSL_strlcpy(full_file, dir, len);
-# ifdef OPENSSL_SYS_VMS
+#ifdef OPENSSL_SYS_VMS
             /*
              * If |file| contains a directory spec, we need to do some
              * careful merging.

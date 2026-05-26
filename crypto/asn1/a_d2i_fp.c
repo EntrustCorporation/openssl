@@ -17,9 +17,9 @@
 #include "crypto/asn1.h"
 
 #ifndef NO_OLD_ASN1
-# ifndef OPENSSL_NO_STDIO
+#ifndef OPENSSL_NO_STDIO
 
-void *ASN1_d2i_fp(void *(*xnew) (void), d2i_of_void *d2i, FILE *in, void **x)
+void *ASN1_d2i_fp(void *(*xnew)(void), d2i_of_void *d2i, FILE *in, void **x)
 {
     BIO *b;
     void *ret;
@@ -33,9 +33,9 @@ void *ASN1_d2i_fp(void *(*xnew) (void), d2i_of_void *d2i, FILE *in, void **x)
     BIO_free(b);
     return ret;
 }
-# endif
+#endif
 
-void *ASN1_d2i_bio(void *(*xnew) (void), d2i_of_void *d2i, BIO *in, void **x)
+void *ASN1_d2i_bio(void *(*xnew)(void), d2i_of_void *d2i, BIO *in, void **x)
 {
     BUF_MEM *b = NULL;
     const unsigned char *p;
@@ -48,7 +48,7 @@ void *ASN1_d2i_bio(void *(*xnew) (void), d2i_of_void *d2i, BIO *in, void **x)
 
     p = (unsigned char *)b->data;
     ret = d2i(x, &p, len);
- err:
+err:
     BUF_MEM_free(b);
     return ret;
 }
@@ -56,7 +56,7 @@ void *ASN1_d2i_bio(void *(*xnew) (void), d2i_of_void *d2i, BIO *in, void **x)
 #endif
 
 void *ASN1_item_d2i_bio_ex(const ASN1_ITEM *it, BIO *in, void *x,
-                           OSSL_LIB_CTX *libctx, const char *propq)
+    OSSL_LIB_CTX *libctx, const char *propq)
 {
     BUF_MEM *b = NULL;
     const unsigned char *p;
@@ -71,7 +71,7 @@ void *ASN1_item_d2i_bio_ex(const ASN1_ITEM *it, BIO *in, void *x,
 
     p = (const unsigned char *)b->data;
     ret = ASN1_item_d2i_ex(x, &p, len, it, libctx, propq);
- err:
+err:
     BUF_MEM_free(b);
     return ret;
 }
@@ -83,10 +83,10 @@ void *ASN1_item_d2i_bio(const ASN1_ITEM *it, BIO *in, void *x)
 
 #ifndef OPENSSL_NO_STDIO
 void *ASN1_item_d2i_fp_ex(const ASN1_ITEM *it, FILE *in, void *x,
-                          OSSL_LIB_CTX *libctx, const char *propq)
+    OSSL_LIB_CTX *libctx, const char *propq)
 {
     BIO *b;
-    char *ret;
+    void *ret;
 
     if ((b = BIO_new(BIO_s_file())) == NULL) {
         ERR_raise(ERR_LIB_ASN1, ERR_R_BUF_LIB);
@@ -104,7 +104,7 @@ void *ASN1_item_d2i_fp(const ASN1_ITEM *it, FILE *in, void *x)
 }
 #endif
 
-#define HEADER_SIZE   8
+#define HEADER_SIZE 2
 #define ASN1_CHUNK_INITIAL_SIZE (16 * 1024)
 int asn1_d2i_read_bio(BIO *in, BUF_MEM **pb)
 {
@@ -139,10 +139,12 @@ int asn1_d2i_read_bio(BIO *in, BUF_MEM **pb)
                 goto err;
             }
             i = BIO_read(in, &(b->data[len]), (int)want);
-            if (i < 0 && diff == 0) {
+
+            if (i <= 0) {
                 ERR_raise(ERR_LIB_ASN1, ASN1_R_NOT_ENOUGH_DATA);
                 goto err;
             }
+
             if (i > 0) {
                 if (len + i < len) {
                     ERR_raise(ERR_LIB_ASN1, ASN1_R_TOO_LONG);
@@ -151,16 +153,68 @@ int asn1_d2i_read_bio(BIO *in, BUF_MEM **pb)
                 len += i;
                 if ((size_t)i < want)
                     continue;
-
             }
         }
         /* else data already loaded */
 
+        /* make sure there is enough data for a complete header */
         p = (unsigned char *)&(b->data[off]);
         q = p;
         diff = len - off;
-        if (diff == 0)
+        if (diff < 2) {
+            /* Failed sanity check */
+            ERR_raise(ERR_LIB_ASN1, ASN1_R_NOT_ENOUGH_DATA);
             goto err;
+        }
+
+        diff--;
+        if ((*(q++) & V_ASN1_PRIMITIVE_TAG) == V_ASN1_PRIMITIVE_TAG) {
+            unsigned int i = 0;
+            /* Multi-byte tag.  See if we have the whole thing yet */
+            do {
+                if (i > 4) {
+                    /* The tag value must fit into int */
+                    ERR_raise(ERR_LIB_ASN1, ASN1_R_HEADER_TOO_LONG);
+                    goto err;
+                }
+                ++i;
+                diff--;
+            } while (diff > 0 && *(q++) & 0x80);
+
+            if (diff == 0) {
+                /*
+                 * End of current data, will need at least 1 more byte for
+                 * length.  2 if the tag is still incomplete
+                 */
+                want = q - p + 2;
+                if (*q & 0x80) {
+                    want++;
+                }
+                continue;
+            }
+        }
+
+        /* Check the length.  This should also work for indefinite length */
+        diff--;
+        if (*q & 0x80) {
+            unsigned int i = *q & 0x7f;
+
+            if (i > sizeof(long)) {
+                ERR_raise(ERR_LIB_ASN1, ASN1_R_TOO_LONG);
+                goto err;
+            }
+            if (i > diff) {
+                want = q - p + i + 1;
+                continue;
+            }
+        }
+
+        /*
+         * We have a complete header now, assuming we didn't hit EOF. Parse the
+         * tag and length
+         */
+        q = p;
+        diff = len - off;
         inf = ASN1_get_object(&q, &slen, &tag, &xclass, (int)diff);
         if (inf & 0x80) {
             unsigned long e;
@@ -169,8 +223,9 @@ int asn1_d2i_read_bio(BIO *in, BUF_MEM **pb)
             if (e != ASN1_R_TOO_LONG)
                 goto err;
             ERR_pop_to_mark();
+            ERR_set_mark();
         }
-        off += q - p;               /* end of data */
+        off += q - p; /* end of data */
 
         if (inf & 1) {
             /* no data body so go round again */
@@ -194,8 +249,7 @@ int asn1_d2i_read_bio(BIO *in, BUF_MEM **pb)
                 size_t chunk_max = ASN1_CHUNK_INITIAL_SIZE;
 
                 want -= (len - off);
-                if (want > INT_MAX /* BIO_read takes an int length */  ||
-                    len + want < len) {
+                if (want > INT_MAX /* BIO_read takes an int length */ || len + want < len) {
                     ERR_raise(ERR_LIB_ASN1, ASN1_R_TOO_LONG);
                     goto err;
                 }
@@ -220,14 +274,14 @@ int asn1_d2i_read_bio(BIO *in, BUF_MEM **pb)
                             ERR_raise(ERR_LIB_ASN1, ASN1_R_NOT_ENOUGH_DATA);
                             goto err;
                         }
-                    /*
-                     * This can't overflow because |len+want| didn't
-                     * overflow.
-                     */
+                        /*
+                         * This can't overflow because |len+want| didn't
+                         * overflow.
+                         */
                         len += i;
                         chunk -= i;
                     }
-                    if (chunk_max < INT_MAX/2)
+                    if (chunk_max < INT_MAX / 2)
                         chunk_max *= 2;
                 }
             }
@@ -249,8 +303,9 @@ int asn1_d2i_read_bio(BIO *in, BUF_MEM **pb)
     }
 
     *pb = b;
+    ERR_clear_last_mark();
     return (int)off;
- err:
+err:
     ERR_clear_last_mark();
     BUF_MEM_free(b);
     return -1;

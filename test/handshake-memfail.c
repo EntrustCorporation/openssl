@@ -29,10 +29,11 @@
  * - rcount:   Number of reallocs counted
  * - fcount:   Number of frees counted
  * - scount:   Number of mallocs counted prior to workload
+ * - srcount:  Number of reallocs counted prior to workload
  */
 static char *cert = NULL;
 static char *privkey = NULL;
-static int mcount, rcount, fcount, scount;
+static int mcount, rcount, fcount, scount, srcount;
 
 /**
  * @brief Performs an SSL/TLS handshake between a test client and server.
@@ -54,16 +55,16 @@ static int do_handshake(OSSL_LIB_CTX *libctx)
     int testresult = 0;
 
     if (!TEST_true(create_ssl_ctx_pair(libctx, TLS_server_method(),
-                                       TLS_client_method(),
-                                       TLS1_VERSION, 0,
-                                       &sctx, &cctx, cert, privkey)))
+            TLS_client_method(),
+            TLS1_VERSION, 0,
+            &sctx, &cctx, cert, privkey)))
         return 0;
 
     /* Now do a handshake */
     if (!TEST_true(create_ssl_objects(sctx, cctx, &serverssl,
-                                      &clientssl, NULL, NULL))
-            || !TEST_true(create_ssl_connection(serverssl, clientssl,
-                                                SSL_ERROR_NONE)))
+            &clientssl, NULL, NULL))
+        || !TEST_true(create_ssl_connection(serverssl, clientssl,
+            SSL_ERROR_NONE)))
         goto end;
 
     testresult = 1;
@@ -135,15 +136,16 @@ static int test_report_alloc_counts(void)
     CRYPTO_get_alloc_counts(&mcount, &rcount, &fcount);
     /*
      * Report our memory allocations from the count run
-     * NOTE: We report a number of allocations to skip here
-     * (the scount value).  These are the allocations that took
-     * place while the test harness itself was getting setup
-     * (i.e. calling OPENSSL_init_crypto/etc).  We can't fail
+     * NOTE: We report a number of (re)allocations to skip here
+     * (the scount + srcount value).  These are the allocations
+     * that took place while the test harness itself was getting
+     * setup (i.e. calling OPENSSL_init_crypto/etc).  We can't fail
      * those allocations as they will cause the test to fail before
      * we have even run the workload.  So report them so we can
      * allow them to function before we start doing any real testing
      */
-    TEST_info("skip: %d count %d\n", scount, mcount - scount);
+    TEST_info("skip: %d count %d\n",
+        scount + srcount, mcount + rcount - scount - srcount);
     return 1;
 }
 
@@ -167,7 +169,7 @@ int setup_tests(void)
         goto err;
 
     if (strcmp(opmode, "count") == 0) {
-        CRYPTO_get_alloc_counts(&scount, &rcount, &fcount);
+        CRYPTO_get_alloc_counts(&scount, &srcount, &fcount);
         ADD_TEST(test_record_alloc_counts);
         ADD_TEST(test_report_alloc_counts);
     } else {
@@ -175,7 +177,7 @@ int setup_tests(void)
     }
     return 1;
 
- err:
+err:
     OPENSSL_free(cert);
     OPENSSL_free(privkey);
     return 0;

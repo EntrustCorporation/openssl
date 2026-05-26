@@ -30,7 +30,7 @@ sub verify {
     run(app([@args]));
 }
 
-plan tests => 206;
+plan tests => 217;
 
 # Canonical success
 ok(verify("ee-cert", "sslserver", ["root-cert"], ["ca-cert"]),
@@ -473,6 +473,10 @@ ok(!verify("bad-othername-cert", "", ["root-cert"], ["nccaothername-cert"], ),
 ok(verify("nc-uri-cert", "", ["root-cert"], ["ncca4-cert"], ),
    "Name constraints URI with userinfo");
 
+ok(!verify("bad-cert-smtputf8-name-constraints", "root-cert", ["bad-cert-smtputf8-name-constraints"], [],
+	  "-partial_chain", "-attime", "1623060000"),
+   "Name constraints bad othername name constraint");
+
 #Check that we get the expected failure return code
 with({ exit_checker => sub { return shift == 2; } },
      sub {
@@ -596,6 +600,34 @@ ok(!verify("ee-cert-policies-bad", "", ["root-cert"], ["ca-pol-cert"],
            "-explicit_policy"),
    "Bad certificate policy");
 
+# Verify Validity Period Boundaries with -attime
+# ee-expired2 Not Before: Sep 18 14:37:57 2025 GMT -- 1758206277
+#              Not After: Sep 16 14:37:57 2035 GMT -- 2073566277
+ok(!verify("ee-expired2", "", ["root-cert"], ["ca-cert"], "-attime",
+           "1758206276"), "Certificate invalid at time 1758206276");
+ok(verify("ee-expired2", "", ["root-cert"], ["ca-cert"], "-attime",
+          "1758206277"), "Certificate valid at time 1758206277");
+ok(verify("ee-expired2", "", ["root-cert"], ["ca-cert"], "-attime",
+          "1758206278"), "Certificate valid at time 1758206278");
+ok(verify("ee-expired2", "", ["root-cert"], ["ca-cert"], "-attime",
+          "2073566276"), "Certificate valid at time 2073566276");
+ok(verify("ee-expired2", "", ["root-cert"], ["ca-cert"], "-attime",
+          "2073566277"), "Certificate valid at time 2073566277");
+ok(!verify("ee-expired2", "", ["root-cert"], ["ca-cert"], "-attime",
+           "2073566278"), "Certificate invalid at time 2073566278");
+
+# CVE-2026-28388
+my $cve_28388_stderr = "cve-2026-28388.err";
+run(app(["openssl", "verify",
+         "-attime", "1739527200",
+         "-CAfile", srctop_file(@certspath, "cve-2026-28388-ca.pem"),
+         "-crl_check", "-use_deltas",
+         "-CRLfile", srctop_file(@certspath, "cve-2026-28388-crls.pem"),
+         srctop_file(@certspath, "cve-2026-28388-leaf.pem")],
+         stderr => $cve_28388_stderr));
+ok(grep(/CRL is not yet valid/, do { open my $fh, '<', $cve_28388_stderr; <$fh> }),
+   "CVE-2026-28388");
+
 # CAstore option
 my $rootcertname = "root-cert";
 my $rootcert = srctop_file(@certspath, "${rootcertname}.pem");
@@ -604,24 +636,36 @@ ok(vfy_root("-CAfile", $rootcert), "CAfile");
 ok(vfy_root("-CAstore", $rootcert), "CAstore");
 ok(vfy_root("-CAstore", $rootcert, "-CAfile", $rootcert), "CAfile and existing CAstore");
 ok(!vfy_root("-CAstore", "non-existing", "-CAfile", $rootcert), "CAfile and non-existing CAstore");
+
 SKIP: {
     skip "file names with colons aren't supported on Windows and VMS", 2
-        if $^O =~ /^(MsWin32|VMS)$/;
+        if $^O =~ /^(MSWin32|VMS)$/;
     my $foo_file = "foo:cert.pem";
     copy($rootcert, $foo_file);
-    ok(vfy_root("-CAstore", $foo_file), "CAstore foo:file");
-    ok(vfy_root("-CAstore", "file:".$foo_file), "CAstore file:foo:file");
+    ok(vfy_root("-CAstore", $foo_file), "CAstore foo:cert.pem");
+    ok(vfy_root("-CAstore", "file:".$foo_file), "CAstore file:foo:cert.pem");
 }
-my $foo_file = "cert.pem";
-copy($rootcert, $foo_file);
-ok(vfy_root("-CAstore", $foo_file), "CAstore foo:file");
-ok(vfy_root("-CAstore", "file:".$foo_file), "CAstore file:foo:file");
+
+my $rel_cert = "cert.pem";
+copy($rootcert, $rel_cert);
+ok(vfy_root("-CAstore", $rel_cert), "CAstore cert");
+ok(vfy_root("-CAstore", "file:".$rel_cert), "CAstore file:cert");
 my $abs_cert = abs_path($rootcert);
+SKIP: {
+    skip "drive letter with relative filename on Windows only", 2
+        unless $^O =~ /^MsWin32$/;
+    my $drive_rel_cert = substr($abs_cert, 0, 2).$rel_cert;
+    ok(vfy_root("-CAstore", $drive_rel_cert), "CAstore D:cert");
+    ok(vfy_root("-CAstore", "file:".$drive_rel_cert), "CAstore file:D:cert");
+}
+
 # Windows file: URIs should have a path part starting with a slash, i.e.
-# file://authority/C:/what/ever/foo.pem and file:///C:/what/ever/foo.pem
-# file://C:/what/ever/foo.pem is non-standard and may not be accepted.
+# file://authority/C:/what/ever/foo.pem and file:///C:/what/ever/foo.pem.
+# So file://C:/what/ever/foo.pem is non-standard and may not be accepted.
 # See RFC 8089 for details.
 $abs_cert = "/" . $abs_cert if ($^O eq "MSWin32");
+
 ok(vfy_root("-CAstore", "file://".$abs_cert), "CAstore file:///path");
+ok(vfy_root("-CAstore", "file:".$abs_cert), "CAstore file:/path"); # we allow dropping the "//" before an empty authority part
 ok(vfy_root("-CAstore", "file://localhost".$abs_cert), "CAstore file://localhost/path");
 ok(!vfy_root("-CAstore", "file://otherhost".$abs_cert), "CAstore file://otherhost/path");

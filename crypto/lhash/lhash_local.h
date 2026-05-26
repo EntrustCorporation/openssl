@@ -6,7 +6,11 @@
  * in the file LICENSE in the source distribution or at
  * https://www.openssl.org/source/license.html
  */
+#if !defined(OSSL_LIBCRYPTO_LHASH_LHASH_LOCAL_H)
+#define OSSL_LIBCRYPTO_LHASH_LHASH_LOCAL_H
+
 #include <openssl/crypto.h>
+#include <openssl/lhash.h>
 
 #include "internal/tsan_assist.h"
 
@@ -28,8 +32,10 @@ struct lhash_st {
     unsigned int num_alloc_nodes;
     unsigned int p;
     unsigned int pmax;
-    unsigned long up_load;      /* load times 256 */
-    unsigned long down_load;    /* load times 256 */
+    unsigned long up_load; /* load times 256 */
+    unsigned long down_load; /* load times 256 */
     unsigned long num_items;
     int error;
 };
+
+#endif /* !defined(OSSL_LIBCRYPTO_LHASH_LHASH_LOCAL_H) */

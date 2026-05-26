@@ -7,17 +7,22 @@
  * https://www.openssl.org/source/license.html
  */
 
+#if !defined(OSSL_LIBCRYPTO_COMP_COMP_LOCAL_H)
+#define OSSL_LIBCRYPTO_COMP_COMP_LOCAL_H
+
+#include <openssl/comp.h>
+
 struct comp_method_st {
-    int type;                   /* NID for compression library */
-    const char *name;           /* A text string to identify the library */
-    int (*init) (COMP_CTX *ctx);
-    void (*finish) (COMP_CTX *ctx);
-    ossl_ssize_t (*compress) (COMP_CTX *ctx,
-                             unsigned char *out, size_t olen,
-                             unsigned char *in, size_t ilen);
-    ossl_ssize_t (*expand) (COMP_CTX *ctx,
-                            unsigned char *out, size_t olen,
-                            unsigned char *in, size_t ilen);
+    int type; /* NID for compression library */
+    const char *name; /* A text string to identify the library */
+    int (*init)(COMP_CTX *ctx);
+    void (*finish)(COMP_CTX *ctx);
+    ossl_ssize_t (*compress)(COMP_CTX *ctx,
+        unsigned char *out, size_t olen,
+        unsigned char *in, size_t ilen);
+    ossl_ssize_t (*expand)(COMP_CTX *ctx,
+        unsigned char *out, size_t olen,
+        unsigned char *in, size_t ilen);
 };
 
 struct comp_ctx_st {
@@ -26,5 +31,7 @@ struct comp_ctx_st {
     unsigned long compress_out;
     unsigned long expand_in;
     unsigned long expand_out;
-    void* data;
+    void *data;
 };
+
+#endif /* !defined(OSSL_LIBCRYPTO_COMP_COMP_LOCAL_H) */

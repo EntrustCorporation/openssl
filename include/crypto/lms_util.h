@@ -9,10 +9,15 @@
 
 /* @brief Internal LMS helper functions */
 
+#if !defined(OSSL_CRYPTO_LMS_UTIL_H)
+#define OSSL_CRYPTO_LMS_UTIL_H
+
 #include "internal/packet.h"
 #include <openssl/params.h>
 #include <openssl/core_names.h>
 #include <openssl/evp.h>
+
+#include "crypto/lms.h"
 
 /*
  * This LMS implementation assumes that the hash algorithm must be the same for
@@ -27,8 +32,7 @@
  * See RFC 8554 Section 3.1.3: Strings of w-bit Elements
  * w: Is one of {1,2,4,8}
  */
-static ossl_unused ossl_inline
-uint8_t lms_ots_coef(const unsigned char *S, uint16_t i, uint8_t w)
+static ossl_unused ossl_inline uint8_t lms_ots_coef(const unsigned char *S, uint16_t i, uint8_t w)
 {
     uint8_t bitmask = (1 << w) - 1;
     uint8_t shift = 8 - (w * (i % (8 / w)) + w);
@@ -37,9 +41,8 @@ uint8_t lms_ots_coef(const unsigned char *S, uint16_t i, uint8_t w)
     return (S[id] >> shift) & bitmask;
 }
 
-static ossl_unused ossl_inline
-int lms_evp_md_ctx_init(EVP_MD_CTX *ctx, const EVP_MD *md,
-                        const LMS_PARAMS *lms_params)
+static ossl_unused ossl_inline int lms_evp_md_ctx_init(EVP_MD_CTX *ctx, const EVP_MD *md,
+    const LMS_PARAMS *lms_params)
 {
     OSSL_PARAM params[2] = { OSSL_PARAM_END, OSSL_PARAM_END };
     OSSL_PARAM *p = NULL;
@@ -47,8 +50,10 @@ int lms_evp_md_ctx_init(EVP_MD_CTX *ctx, const EVP_MD *md,
     /* The OpenSSL SHAKE implementation requires the xoflen to be set */
     if (strncmp(lms_params->digestname, "SHAKE", 5) == 0) {
         params[0] = OSSL_PARAM_construct_uint32(OSSL_DIGEST_PARAM_XOFLEN,
-                                                (uint32_t *)&lms_params->n);
+            (uint32_t *)&lms_params->n);
         p = params;
     }
     return EVP_DigestInit_ex2(ctx, md, p);
 }
+
+#endif /* !defined(OSSL_CRYPTO_LMS_UTIL_H) */

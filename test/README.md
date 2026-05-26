@@ -184,3 +184,54 @@ To randomise the test ordering:
 To run the tests using the order defined by the random seed `42`:
 
     $ make OPENSSL_TEST_RAND_ORDER=42 test
+
+Memory Allocation Failure Tests
+-------------------------------
+
+Some tests use the `ADD_MFAIL_TEST` framework to exhaustively verify that
+functions handle every possible allocation failure gracefully. These tests
+run repeatedly, failing one allocation later each iteration. The
+`ADD_MFAIL_NO_CHECK_TEST` variant relaxes the requirement that the test
+return 0 when a failure was triggered. Behavior is controlled with the
+following environment variables:
+
+    OPENSSL_TEST_MFAIL_DISABLE=1    Disable mfail custom allocator installation.
+
+    OPENSSL_TEST_MFAIL_SKIP_ALL=1   Skip all mfail tests.
+
+    OPENSSL_TEST_MFAIL_SKIP_SLOW=1  Skip mfail tests whose allocation count
+                                    exceeds the slow threshold.
+
+    OPENSSL_TEST_MFAIL_SLOW=N       Slow threshold (default 1000).
+
+    OPENSSL_TEST_MFAIL_POINT=N      Run only failure point N (0-indexed),
+                                    useful for debugging a specific failure.
+
+    OPENSSL_TEST_MFAIL_START=N      Start iteration from point N, skipping
+                                    earlier points that are already fixed.
+
+    OPENSSL_TEST_MFAIL_BACKTRACE=1  Print a backtrace at each injection point.
+
+For example, to debug a failure at allocation point 42:
+
+    $ OPENSSL_TEST_MFAIL_POINT=42 ./test/crltest -test test_crl_diff_mfail
+
+Or to skip already-fixed points and collect remaining failures:
+
+    $ OPENSSL_TEST_MFAIL_START=13 make TESTS=test_crl test
+
+Running Tests under Valgrind
+----------------------------
+
+Normally, testing for memory leaks is accomplished by building Openssl with the
+enable-asan option, which links the library with the compiler asan library.  However
+some people prefer to use valgrind to do dynamic instrumentation for memory leak checking.
+OpenSSL also offers a suppression file to suppress reachable memory leaks, that are often
+inappropriately considered to be true leaks.  In order to maintain and test this
+suppression file, OpenSSL tests can be run under valgrind automatically.
+
+To run the test suite under valgrind:
+
+    $ make OSSL_USE_VALGRIND=yes test
+
+Doing so will create valgrind.log file for each test under the test-runs subdirectory.
