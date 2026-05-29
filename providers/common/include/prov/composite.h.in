@@ -9,7 +9,14 @@
  * https://www.openssl.org/source/license.html
  */
 
+#ifndef PROV_COMPOSITE_H
+# define PROV_COMPOSITE_H
+
 #include "internal/der.h"
+#include "crypto/ml_dsa.h"
+#include "prov/provider_ctx.h"
+
+#define COMPOSITE_PREFIX "436F6D706F73697465416C676F726974686D5369676E61747572657332303235"
 
 /* Well known OIDs precompiled */
 {-
@@ -19,6 +26,27 @@
 -}
 
 typedef struct {
-  EVP_PKEY *ml_dsa_key;
+  ML_DSA_KEY *ml_dsa_key;
   EVP_PKEY *classic_key;
 } COMPOSITE_KEY;
+
+typedef struct {
+    OSSL_LIB_CTX *libctx;
+    const char *alg;
+    const unsigned char *oid;
+    size_t oid_sz;
+    uint8_t context_string[255]; /* ML_DSA_MAX_CONTEXT_STRING_LEN */
+    size_t context_string_len;
+    const char *prehash_alg;
+    size_t prehash_len;
+
+    /* ML DSA */
+    PROV_CTX *mldsa_ctx;
+
+    /* CLASSIC */
+    EVP_PKEY_CTX *classic_ctx;
+
+    COMPOSITE_KEY *key;
+} PROV_COMPOSITE_CTX;
+
+#endif /* PROV_COMPOSITE_H */

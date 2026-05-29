@@ -42,6 +42,10 @@
 #include "prov/ml_dsa_codecs.h"
 #include "prov/ml_kem_codecs.h"
 #include "prov/lms_codecs.h"
+#ifndef OPENSSL_NO_COMPOSITE
+# include "prov/composite_codecs.h"
+# include <openssl/obj_mac.h>
+#endif
 #include "providers/implementations/encode_decode/encode_key2any.inc"
 
 #include <crypto/asn1.h>
@@ -1787,3 +1791,185 @@ MAKE_ENCODER(ml_dsa_87, ml_dsa, SubjectPublicKeyInfo, pem);
 MAKE_ENCODER(lms, lms, SubjectPublicKeyInfo, der);
 MAKE_ENCODER(lms, lms, SubjectPublicKeyInfo, pem);
 #endif
+
+#ifndef OPENSSL_NO_COMPOSITE
+static int composite_spki_pub_to_der(const void *vkey, unsigned char **pder,
+    ossl_unused void *ctx)
+{
+    return ossl_composite_i2d_pubkey((const COMPOSITE_KEY *)vkey, pder);
+}
+
+static int composite_pki_priv_to_der(const void *vkey, unsigned char **pder,
+    ossl_unused void *ctx)
+{
+    return ossl_composite_i2d_prvkey((const COMPOSITE_KEY *)vkey, pder);
+}
+
+# define composite_epki_priv_to_der composite_pki_priv_to_der
+# define prepare_composite_params   NULL
+# define composite_check_key_type   NULL
+
+/* evp_type and pem_type defines for all 18 composite variants */
+# define mldsa44_rsa2048_pss_sha256_evp_type        NID_ML_DSA_44_RSA2048_PSS_SHA256
+# define mldsa44_rsa2048_pss_sha256_pem_type        LN_ML_DSA_44_RSA2048_PSS_SHA256
+# define mldsa44_rsa2048_pkcs15_sha256_evp_type     NID_ML_DSA_44_RSA2048_PKCS15_SHA256
+# define mldsa44_rsa2048_pkcs15_sha256_pem_type     LN_ML_DSA_44_RSA2048_PKCS15_SHA256
+# define mldsa44_ed25519_sha512_evp_type            NID_ML_DSA_44_Ed25519_SHA512
+# define mldsa44_ed25519_sha512_pem_type            LN_ML_DSA_44_Ed25519_SHA512
+# define mldsa44_ecdsa_p256_sha256_evp_type         NID_ML_DSA_44_ECDSA_P256_SHA256
+# define mldsa44_ecdsa_p256_sha256_pem_type         LN_ML_DSA_44_ECDSA_P256_SHA256
+# define mldsa65_rsa3072_pss_sha512_evp_type        NID_ML_DSA_65_RSA3072_PSS_SHA512
+# define mldsa65_rsa3072_pss_sha512_pem_type        LN_ML_DSA_65_RSA3072_PSS_SHA512
+# define mldsa65_rsa3072_pkcs15_sha512_evp_type     NID_ML_DSA_65_RSA3072_PKCS15_SHA512
+# define mldsa65_rsa3072_pkcs15_sha512_pem_type     LN_ML_DSA_65_RSA3072_PKCS15_SHA512
+# define mldsa65_rsa4096_pss_sha512_evp_type        NID_ML_DSA_65_RSA4096_PSS_SHA512
+# define mldsa65_rsa4096_pss_sha512_pem_type        LN_ML_DSA_65_RSA4096_PSS_SHA512
+# define mldsa65_rsa4096_pkcs15_sha512_evp_type     NID_ML_DSA_65_RSA4096_PKCS15_SHA512
+# define mldsa65_rsa4096_pkcs15_sha512_pem_type     LN_ML_DSA_65_RSA4096_PKCS15_SHA512
+# define mldsa65_ecdsa_p256_sha512_evp_type         NID_ML_DSA_65_ECDSA_P256_SHA512
+# define mldsa65_ecdsa_p256_sha512_pem_type         LN_ML_DSA_65_ECDSA_P256_SHA512
+# define mldsa65_ecdsa_p384_sha512_evp_type         NID_ML_DSA_65_ECDSA_P384_SHA512
+# define mldsa65_ecdsa_p384_sha512_pem_type         LN_ML_DSA_65_ECDSA_P384_SHA512
+# define mldsa65_ecdsa_brainpoolP256r1_sha512_evp_type  NID_ML_DSA_65_ECDSA_brainpoolP256r1_SHA512
+# define mldsa65_ecdsa_brainpoolP256r1_sha512_pem_type  LN_ML_DSA_65_ECDSA_brainpoolP256r1_SHA512
+# define mldsa65_ed25519_sha512_evp_type            NID_ML_DSA_65_Ed25519_SHA512
+# define mldsa65_ed25519_sha512_pem_type            LN_ML_DSA_65_Ed25519_SHA512
+# define mldsa87_ecdsa_p384_sha512_evp_type         NID_ML_DSA_87_ECDSA_P384_SHA512
+# define mldsa87_ecdsa_p384_sha512_pem_type         LN_ML_DSA_87_ECDSA_P384_SHA512
+# define mldsa87_ecdsa_brainpoolP384r1_sha512_evp_type  NID_ML_DSA_87_ECDSA_brainpoolP384r1_SHA512
+# define mldsa87_ecdsa_brainpoolP384r1_sha512_pem_type  LN_ML_DSA_87_ECDSA_brainpoolP384r1_SHA512
+# define mldsa87_ed448_shake256_evp_type            NID_ML_DSA_87_Ed448_SHAKE256
+# define mldsa87_ed448_shake256_pem_type            LN_ML_DSA_87_Ed448_SHAKE256
+# define mldsa87_rsa3072_pss_sha512_evp_type        NID_ML_DSA_87_RSA3072_PSS_SHA512
+# define mldsa87_rsa3072_pss_sha512_pem_type        LN_ML_DSA_87_RSA3072_PSS_SHA512
+# define mldsa87_rsa4096_pss_sha512_evp_type        NID_ML_DSA_87_RSA4096_PSS_SHA512
+# define mldsa87_rsa4096_pss_sha512_pem_type        LN_ML_DSA_87_RSA4096_PSS_SHA512
+# define mldsa87_ecdsa_p521_sha512_evp_type         NID_ML_DSA_87_ECDSA_P521_SHA512
+# define mldsa87_ecdsa_p521_sha512_pem_type         LN_ML_DSA_87_ECDSA_P521_SHA512
+
+MAKE_ENCODER(mldsa44_rsa2048_pss_sha256,         composite, EncryptedPrivateKeyInfo, der);
+MAKE_ENCODER(mldsa44_rsa2048_pss_sha256,         composite, EncryptedPrivateKeyInfo, pem);
+MAKE_ENCODER(mldsa44_rsa2048_pss_sha256,         composite, PrivateKeyInfo,          der);
+MAKE_ENCODER(mldsa44_rsa2048_pss_sha256,         composite, PrivateKeyInfo,          pem);
+MAKE_ENCODER(mldsa44_rsa2048_pss_sha256,         composite, SubjectPublicKeyInfo,    der);
+MAKE_ENCODER(mldsa44_rsa2048_pss_sha256,         composite, SubjectPublicKeyInfo,    pem);
+
+MAKE_ENCODER(mldsa44_rsa2048_pkcs15_sha256,      composite, EncryptedPrivateKeyInfo, der);
+MAKE_ENCODER(mldsa44_rsa2048_pkcs15_sha256,      composite, EncryptedPrivateKeyInfo, pem);
+MAKE_ENCODER(mldsa44_rsa2048_pkcs15_sha256,      composite, PrivateKeyInfo,          der);
+MAKE_ENCODER(mldsa44_rsa2048_pkcs15_sha256,      composite, PrivateKeyInfo,          pem);
+MAKE_ENCODER(mldsa44_rsa2048_pkcs15_sha256,      composite, SubjectPublicKeyInfo,    der);
+MAKE_ENCODER(mldsa44_rsa2048_pkcs15_sha256,      composite, SubjectPublicKeyInfo,    pem);
+
+MAKE_ENCODER(mldsa44_ed25519_sha512,             composite, EncryptedPrivateKeyInfo, der);
+MAKE_ENCODER(mldsa44_ed25519_sha512,             composite, EncryptedPrivateKeyInfo, pem);
+MAKE_ENCODER(mldsa44_ed25519_sha512,             composite, PrivateKeyInfo,          der);
+MAKE_ENCODER(mldsa44_ed25519_sha512,             composite, PrivateKeyInfo,          pem);
+MAKE_ENCODER(mldsa44_ed25519_sha512,             composite, SubjectPublicKeyInfo,    der);
+MAKE_ENCODER(mldsa44_ed25519_sha512,             composite, SubjectPublicKeyInfo,    pem);
+
+MAKE_ENCODER(mldsa44_ecdsa_p256_sha256,          composite, EncryptedPrivateKeyInfo, der);
+MAKE_ENCODER(mldsa44_ecdsa_p256_sha256,          composite, EncryptedPrivateKeyInfo, pem);
+MAKE_ENCODER(mldsa44_ecdsa_p256_sha256,          composite, PrivateKeyInfo,          der);
+MAKE_ENCODER(mldsa44_ecdsa_p256_sha256,          composite, PrivateKeyInfo,          pem);
+MAKE_ENCODER(mldsa44_ecdsa_p256_sha256,          composite, SubjectPublicKeyInfo,    der);
+MAKE_ENCODER(mldsa44_ecdsa_p256_sha256,          composite, SubjectPublicKeyInfo,    pem);
+
+MAKE_ENCODER(mldsa65_rsa3072_pss_sha512,         composite, EncryptedPrivateKeyInfo, der);
+MAKE_ENCODER(mldsa65_rsa3072_pss_sha512,         composite, EncryptedPrivateKeyInfo, pem);
+MAKE_ENCODER(mldsa65_rsa3072_pss_sha512,         composite, PrivateKeyInfo,          der);
+MAKE_ENCODER(mldsa65_rsa3072_pss_sha512,         composite, PrivateKeyInfo,          pem);
+MAKE_ENCODER(mldsa65_rsa3072_pss_sha512,         composite, SubjectPublicKeyInfo,    der);
+MAKE_ENCODER(mldsa65_rsa3072_pss_sha512,         composite, SubjectPublicKeyInfo,    pem);
+
+MAKE_ENCODER(mldsa65_rsa3072_pkcs15_sha512,      composite, EncryptedPrivateKeyInfo, der);
+MAKE_ENCODER(mldsa65_rsa3072_pkcs15_sha512,      composite, EncryptedPrivateKeyInfo, pem);
+MAKE_ENCODER(mldsa65_rsa3072_pkcs15_sha512,      composite, PrivateKeyInfo,          der);
+MAKE_ENCODER(mldsa65_rsa3072_pkcs15_sha512,      composite, PrivateKeyInfo,          pem);
+MAKE_ENCODER(mldsa65_rsa3072_pkcs15_sha512,      composite, SubjectPublicKeyInfo,    der);
+MAKE_ENCODER(mldsa65_rsa3072_pkcs15_sha512,      composite, SubjectPublicKeyInfo,    pem);
+
+MAKE_ENCODER(mldsa65_rsa4096_pss_sha512,         composite, EncryptedPrivateKeyInfo, der);
+MAKE_ENCODER(mldsa65_rsa4096_pss_sha512,         composite, EncryptedPrivateKeyInfo, pem);
+MAKE_ENCODER(mldsa65_rsa4096_pss_sha512,         composite, PrivateKeyInfo,          der);
+MAKE_ENCODER(mldsa65_rsa4096_pss_sha512,         composite, PrivateKeyInfo,          pem);
+MAKE_ENCODER(mldsa65_rsa4096_pss_sha512,         composite, SubjectPublicKeyInfo,    der);
+MAKE_ENCODER(mldsa65_rsa4096_pss_sha512,         composite, SubjectPublicKeyInfo,    pem);
+
+MAKE_ENCODER(mldsa65_rsa4096_pkcs15_sha512,      composite, EncryptedPrivateKeyInfo, der);
+MAKE_ENCODER(mldsa65_rsa4096_pkcs15_sha512,      composite, EncryptedPrivateKeyInfo, pem);
+MAKE_ENCODER(mldsa65_rsa4096_pkcs15_sha512,      composite, PrivateKeyInfo,          der);
+MAKE_ENCODER(mldsa65_rsa4096_pkcs15_sha512,      composite, PrivateKeyInfo,          pem);
+MAKE_ENCODER(mldsa65_rsa4096_pkcs15_sha512,      composite, SubjectPublicKeyInfo,    der);
+MAKE_ENCODER(mldsa65_rsa4096_pkcs15_sha512,      composite, SubjectPublicKeyInfo,    pem);
+
+MAKE_ENCODER(mldsa65_ecdsa_p256_sha512,          composite, EncryptedPrivateKeyInfo, der);
+MAKE_ENCODER(mldsa65_ecdsa_p256_sha512,          composite, EncryptedPrivateKeyInfo, pem);
+MAKE_ENCODER(mldsa65_ecdsa_p256_sha512,          composite, PrivateKeyInfo,          der);
+MAKE_ENCODER(mldsa65_ecdsa_p256_sha512,          composite, PrivateKeyInfo,          pem);
+MAKE_ENCODER(mldsa65_ecdsa_p256_sha512,          composite, SubjectPublicKeyInfo,    der);
+MAKE_ENCODER(mldsa65_ecdsa_p256_sha512,          composite, SubjectPublicKeyInfo,    pem);
+
+MAKE_ENCODER(mldsa65_ecdsa_p384_sha512,          composite, EncryptedPrivateKeyInfo, der);
+MAKE_ENCODER(mldsa65_ecdsa_p384_sha512,          composite, EncryptedPrivateKeyInfo, pem);
+MAKE_ENCODER(mldsa65_ecdsa_p384_sha512,          composite, PrivateKeyInfo,          der);
+MAKE_ENCODER(mldsa65_ecdsa_p384_sha512,          composite, PrivateKeyInfo,          pem);
+MAKE_ENCODER(mldsa65_ecdsa_p384_sha512,          composite, SubjectPublicKeyInfo,    der);
+MAKE_ENCODER(mldsa65_ecdsa_p384_sha512,          composite, SubjectPublicKeyInfo,    pem);
+
+MAKE_ENCODER(mldsa65_ecdsa_brainpoolP256r1_sha512, composite, EncryptedPrivateKeyInfo, der);
+MAKE_ENCODER(mldsa65_ecdsa_brainpoolP256r1_sha512, composite, EncryptedPrivateKeyInfo, pem);
+MAKE_ENCODER(mldsa65_ecdsa_brainpoolP256r1_sha512, composite, PrivateKeyInfo,          der);
+MAKE_ENCODER(mldsa65_ecdsa_brainpoolP256r1_sha512, composite, PrivateKeyInfo,          pem);
+MAKE_ENCODER(mldsa65_ecdsa_brainpoolP256r1_sha512, composite, SubjectPublicKeyInfo,    der);
+MAKE_ENCODER(mldsa65_ecdsa_brainpoolP256r1_sha512, composite, SubjectPublicKeyInfo,    pem);
+
+MAKE_ENCODER(mldsa65_ed25519_sha512,             composite, EncryptedPrivateKeyInfo, der);
+MAKE_ENCODER(mldsa65_ed25519_sha512,             composite, EncryptedPrivateKeyInfo, pem);
+MAKE_ENCODER(mldsa65_ed25519_sha512,             composite, PrivateKeyInfo,          der);
+MAKE_ENCODER(mldsa65_ed25519_sha512,             composite, PrivateKeyInfo,          pem);
+MAKE_ENCODER(mldsa65_ed25519_sha512,             composite, SubjectPublicKeyInfo,    der);
+MAKE_ENCODER(mldsa65_ed25519_sha512,             composite, SubjectPublicKeyInfo,    pem);
+
+MAKE_ENCODER(mldsa87_ecdsa_p384_sha512,          composite, EncryptedPrivateKeyInfo, der);
+MAKE_ENCODER(mldsa87_ecdsa_p384_sha512,          composite, EncryptedPrivateKeyInfo, pem);
+MAKE_ENCODER(mldsa87_ecdsa_p384_sha512,          composite, PrivateKeyInfo,          der);
+MAKE_ENCODER(mldsa87_ecdsa_p384_sha512,          composite, PrivateKeyInfo,          pem);
+MAKE_ENCODER(mldsa87_ecdsa_p384_sha512,          composite, SubjectPublicKeyInfo,    der);
+MAKE_ENCODER(mldsa87_ecdsa_p384_sha512,          composite, SubjectPublicKeyInfo,    pem);
+
+MAKE_ENCODER(mldsa87_ecdsa_brainpoolP384r1_sha512, composite, EncryptedPrivateKeyInfo, der);
+MAKE_ENCODER(mldsa87_ecdsa_brainpoolP384r1_sha512, composite, EncryptedPrivateKeyInfo, pem);
+MAKE_ENCODER(mldsa87_ecdsa_brainpoolP384r1_sha512, composite, PrivateKeyInfo,          der);
+MAKE_ENCODER(mldsa87_ecdsa_brainpoolP384r1_sha512, composite, PrivateKeyInfo,          pem);
+MAKE_ENCODER(mldsa87_ecdsa_brainpoolP384r1_sha512, composite, SubjectPublicKeyInfo,    der);
+MAKE_ENCODER(mldsa87_ecdsa_brainpoolP384r1_sha512, composite, SubjectPublicKeyInfo,    pem);
+
+MAKE_ENCODER(mldsa87_ed448_shake256,             composite, EncryptedPrivateKeyInfo, der);
+MAKE_ENCODER(mldsa87_ed448_shake256,             composite, EncryptedPrivateKeyInfo, pem);
+MAKE_ENCODER(mldsa87_ed448_shake256,             composite, PrivateKeyInfo,          der);
+MAKE_ENCODER(mldsa87_ed448_shake256,             composite, PrivateKeyInfo,          pem);
+MAKE_ENCODER(mldsa87_ed448_shake256,             composite, SubjectPublicKeyInfo,    der);
+MAKE_ENCODER(mldsa87_ed448_shake256,             composite, SubjectPublicKeyInfo,    pem);
+
+MAKE_ENCODER(mldsa87_rsa3072_pss_sha512,         composite, EncryptedPrivateKeyInfo, der);
+MAKE_ENCODER(mldsa87_rsa3072_pss_sha512,         composite, EncryptedPrivateKeyInfo, pem);
+MAKE_ENCODER(mldsa87_rsa3072_pss_sha512,         composite, PrivateKeyInfo,          der);
+MAKE_ENCODER(mldsa87_rsa3072_pss_sha512,         composite, PrivateKeyInfo,          pem);
+MAKE_ENCODER(mldsa87_rsa3072_pss_sha512,         composite, SubjectPublicKeyInfo,    der);
+MAKE_ENCODER(mldsa87_rsa3072_pss_sha512,         composite, SubjectPublicKeyInfo,    pem);
+
+MAKE_ENCODER(mldsa87_rsa4096_pss_sha512,         composite, EncryptedPrivateKeyInfo, der);
+MAKE_ENCODER(mldsa87_rsa4096_pss_sha512,         composite, EncryptedPrivateKeyInfo, pem);
+MAKE_ENCODER(mldsa87_rsa4096_pss_sha512,         composite, PrivateKeyInfo,          der);
+MAKE_ENCODER(mldsa87_rsa4096_pss_sha512,         composite, PrivateKeyInfo,          pem);
+MAKE_ENCODER(mldsa87_rsa4096_pss_sha512,         composite, SubjectPublicKeyInfo,    der);
+MAKE_ENCODER(mldsa87_rsa4096_pss_sha512,         composite, SubjectPublicKeyInfo,    pem);
+
+MAKE_ENCODER(mldsa87_ecdsa_p521_sha512,          composite, EncryptedPrivateKeyInfo, der);
+MAKE_ENCODER(mldsa87_ecdsa_p521_sha512,          composite, EncryptedPrivateKeyInfo, pem);
+MAKE_ENCODER(mldsa87_ecdsa_p521_sha512,          composite, PrivateKeyInfo,          der);
+MAKE_ENCODER(mldsa87_ecdsa_p521_sha512,          composite, PrivateKeyInfo,          pem);
+MAKE_ENCODER(mldsa87_ecdsa_p521_sha512,          composite, SubjectPublicKeyInfo,    der);
+MAKE_ENCODER(mldsa87_ecdsa_p521_sha512,          composite, SubjectPublicKeyInfo,    pem);
+#endif /* OPENSSL_NO_COMPOSITE */

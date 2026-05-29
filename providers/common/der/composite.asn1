@@ -9,23 +9,23 @@
 
 -- Taken from https://datatracker.ietf.org/doc/draft-ietf-lamps-pq-composite-sigs/
 
-sigAlgs OBJECT IDENTIFIER ::= { 2 16 840 1 114027 80 8 1 }
+sigAlgs OBJECT IDENTIFIER ::= { 1 3 6 1 5 5 7 6 }
 
-id-mldsa44-rsa2048-pss-sha256 OBJECT IDENTIFIER ::= { sigAlgs 100 }
-id-mldsa44-rsa2048-pkcs15-sha256 OBJECT IDENTIFIER ::= { sigAlgs 101 }
-id-mldsa44-ed25519-sha512 OBJECT IDENTIFIER ::= { sigAlgs 102 }
-id-mldsa44-ecdsa-p256-sha256 OBJECT IDENTIFIER ::= { sigAlgs 103 }
-id-mldsa65-rsa3072-pss-sha512 OBJECT IDENTIFIER ::= { sigAlgs 104 } 
-id-mldsa65-rsa3072-pkcs15-sha512 OBJECT IDENTIFIER ::= { sigAlgs 105 } 
-id-mldsa65-rsa4096-pss-sha512 OBJECT IDENTIFIER ::= { sigAlgs 106 } 
-id-mldsa65-rsa4096-pkcs15-sha512 OBJECT IDENTIFIER ::= { sigAlgs 107 } 
-id-mldsa65-ecdsa-p256-sha512 OBJECT IDENTIFIER ::= { sigAlgs 108 } 
-id-mldsa65-ecdsa-p384-sha512 OBJECT IDENTIFIER ::= { sigAlgs 109 } 
-id-mldsa65-ecdsa-brainpoolP256r1-sha512 OBJECT IDENTIFIER ::= { sigAlgs 110 } 
-id-mldsa65-ed25519-sha512 OBJECT IDENTIFIER ::= { sigAlgs 111 } 
-id-mldsa87-ecdsa-p384-sha512 OBJECT IDENTIFIER ::= { sigAlgs 112 } 
-id-mldsa87-ecdsa-brainpoolp384r1-sha512 OBJECT IDENTIFIER ::= { sigAlgs 113 } 
-id-mldsa87-ed448-shake256 OBJECT IDENTIFIER ::= { sigAlgs 114 } 
-id-mldsa87-rsa4096-pss-sha512 OBJECT IDENTIFIER ::= { sigAlgs 115 } 
-id-mldsa87-ecdsa-p521-sha512 OBJECT IDENTIFIER ::= { sigAlgs 116 } 
-id-mldsa87-rsa3072-pss-sha512 OBJECT IDENTIFIER ::= { sigAlgs 117 } 
+id-mldsa44-rsa2048-pss-sha256 OBJECT IDENTIFIER ::= { sigAlgs 37 }
+id-mldsa44-rsa2048-pkcs15-sha256 OBJECT IDENTIFIER ::= { sigAlgs 38 }
+id-mldsa44-ed25519-sha512 OBJECT IDENTIFIER ::= { sigAlgs 39 }
+id-mldsa44-ecdsa-p256-sha256 OBJECT IDENTIFIER ::= { sigAlgs 40 }
+id-mldsa65-rsa3072-pss-sha512 OBJECT IDENTIFIER ::= { sigAlgs 41 } 
+id-mldsa65-rsa3072-pkcs15-sha512 OBJECT IDENTIFIER ::= { sigAlgs 42 } 
+id-mldsa65-rsa4096-pss-sha512 OBJECT IDENTIFIER ::= { sigAlgs 43 } 
+id-mldsa65-rsa4096-pkcs15-sha512 OBJECT IDENTIFIER ::= { sigAlgs 44 } 
+id-mldsa65-ecdsa-p256-sha512 OBJECT IDENTIFIER ::= { sigAlgs 45 } 
+id-mldsa65-ecdsa-p384-sha512 OBJECT IDENTIFIER ::= { sigAlgs 46 } 
+id-mldsa65-ecdsa-brainpoolP256r1-sha512 OBJECT IDENTIFIER ::= { sigAlgs 47 } 
+id-mldsa65-ed25519-sha512 OBJECT IDENTIFIER ::= { sigAlgs 48 } 
+id-mldsa87-ecdsa-p384-sha512 OBJECT IDENTIFIER ::= { sigAlgs 49 } 
+id-mldsa87-ecdsa-brainpoolp384r1-sha512 OBJECT IDENTIFIER ::= { sigAlgs 50 } 
+id-mldsa87-ed448-shake256 OBJECT IDENTIFIER ::= { sigAlgs 51 } 
+id-mldsa87-rsa3072-pss-sha512 OBJECT IDENTIFIER ::= { sigAlgs 52 } 
+id-mldsa87-rsa4096-pss-sha512 OBJECT IDENTIFIER ::= { sigAlgs 53 } 
+id-mldsa87-ecdsa-p521-sha512 OBJECT IDENTIFIER ::= { sigAlgs 54 } 

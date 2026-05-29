@@ -342,6 +342,8 @@ GENERATE[providers/implementations/keymgmt/lms_kmgmt.inc]=\
     providers/implementations/keymgmt/lms_kmgmt.inc.in
 GENERATE[providers/implementations/keymgmt/mac_legacy_kmgmt.inc]=\
     providers/implementations/keymgmt/mac_legacy_kmgmt.inc.in
+GENERATE[providers/implementations/keymgmt/composite_kmgmt.inc]=\
+    providers/implementations/keymgmt/composite_kmgmt.inc.in
 GENERATE[providers/implementations/keymgmt/ml_dsa_kmgmt.inc]=\
     providers/implementations/keymgmt/ml_dsa_kmgmt.inc.in
 GENERATE[providers/implementations/keymgmt/ml_kem_kmgmt.inc]=\
