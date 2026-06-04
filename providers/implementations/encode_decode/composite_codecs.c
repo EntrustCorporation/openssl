@@ -11,11 +11,13 @@
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/encoder.h>
+#include <openssl/decoder.h>
 #include <openssl/core_names.h>
 #include <openssl/proverr.h>
 #include "crypto/ml_dsa.h"
 #include "prov/composite_codecs.h"
 #include "prov/ml_dsa_codecs.h"
+#include "prov/provider_ctx.h"
 
 #ifndef OPENSSL_NO_COMPOSITE
 
@@ -300,6 +302,184 @@ int ossl_composite_key_to_text(BIO *out, const COMPOSITE_KEY *key,
     }
 
     return 1;
+}
+
+/*
+ * Decode the classic sub-key from its raw wire format.
+ * Used by ossl_composite_d2i_pubkey() and ossl_composite_d2i_prvkey().
+ */
+static EVP_PKEY *composite_codecs_decode_classic_pub(OSSL_LIB_CTX *libctx,
+                                                     const char *classic_alg,
+                                                     const char *ec_curve,
+                                                     const unsigned char *buf,
+                                                     size_t buf_len)
+{
+    EVP_PKEY *pkey = NULL;
+    const unsigned char *ptr = buf;
+    size_t ptrlen = buf_len;
+    OSSL_DECODER_CTX *dctx;
+    OSSL_PARAM params[3];
+    EVP_PKEY_CTX *pctx;
+
+    if (strcmp(classic_alg, "RSA") == 0) {
+        dctx = OSSL_DECODER_CTX_new_for_pkey(
+            &pkey, "DER", "type-specific", "RSA",
+            OSSL_KEYMGMT_SELECT_PUBLIC_KEY, libctx, NULL);
+        if (dctx == NULL)
+            return NULL;
+        if (!OSSL_DECODER_from_data(dctx, &ptr, &ptrlen))
+            pkey = NULL;
+        OSSL_DECODER_CTX_free(dctx);
+    } else if (strcmp(classic_alg, "EC") == 0) {
+        params[0] = OSSL_PARAM_construct_utf8_string(
+            OSSL_PKEY_PARAM_GROUP_NAME, (char *)ec_curve, 0);
+        params[1] = OSSL_PARAM_construct_octet_string(
+            OSSL_PKEY_PARAM_PUB_KEY, (void *)buf, buf_len);
+        params[2] = OSSL_PARAM_construct_end();
+        pctx = EVP_PKEY_CTX_new_from_name(libctx, "EC", NULL);
+        if (pctx == NULL)
+            return NULL;
+        if (EVP_PKEY_fromdata_init(pctx) <= 0
+            || EVP_PKEY_fromdata(pctx, &pkey,
+                                 EVP_PKEY_PUBLIC_KEY, params) <= 0)
+            pkey = NULL;
+        EVP_PKEY_CTX_free(pctx);
+    } else if (strcmp(classic_alg, "ED25519") == 0) {
+        pkey = EVP_PKEY_new_raw_public_key_ex(libctx, "ED25519", NULL,
+                                              buf, buf_len);
+    } else if (strcmp(classic_alg, "ED448") == 0) {
+        pkey = EVP_PKEY_new_raw_public_key_ex(libctx, "ED448", NULL,
+                                              buf, buf_len);
+    }
+    return pkey;
+}
+
+static EVP_PKEY *composite_codecs_decode_classic_priv(OSSL_LIB_CTX *libctx,
+                                                      const char *classic_alg,
+                                                      const char *ec_curve,
+                                                      const unsigned char *buf,
+                                                      size_t buf_len)
+{
+    EVP_PKEY *pkey = NULL;
+    const unsigned char *ptr = buf;
+    size_t ptrlen = buf_len;
+    OSSL_DECODER_CTX *dctx;
+
+    if (strcmp(classic_alg, "RSA") == 0) {
+        dctx = OSSL_DECODER_CTX_new_for_pkey(
+            &pkey, "DER", "type-specific", "RSA",
+            OSSL_KEYMGMT_SELECT_PRIVATE_KEY, libctx, NULL);
+        if (dctx == NULL)
+            return NULL;
+        if (!OSSL_DECODER_from_data(dctx, &ptr, &ptrlen))
+            pkey = NULL;
+        OSSL_DECODER_CTX_free(dctx);
+    } else if (strcmp(classic_alg, "EC") == 0) {
+        dctx = OSSL_DECODER_CTX_new_for_pkey(
+            &pkey, "DER", "type-specific", "EC",
+            OSSL_KEYMGMT_SELECT_PRIVATE_KEY, libctx, NULL);
+        if (dctx == NULL)
+            return NULL;
+        if (!OSSL_DECODER_from_data(dctx, &ptr, &ptrlen))
+            pkey = NULL;
+        OSSL_DECODER_CTX_free(dctx);
+    } else if (strcmp(classic_alg, "ED25519") == 0) {
+        pkey = EVP_PKEY_new_raw_private_key_ex(libctx, "ED25519", NULL,
+                                               buf, buf_len);
+    } else if (strcmp(classic_alg, "ED448") == 0) {
+        pkey = EVP_PKEY_new_raw_private_key_ex(libctx, "ED448", NULL,
+                                               buf, buf_len);
+    }
+    return pkey;
+}
+
+COMPOSITE_KEY *ossl_composite_d2i_pubkey(const unsigned char *pk,
+                                         int pk_len,
+                                         int ml_dsa_evp_type,
+                                         const char *classic_alg,
+                                         const char *ec_curve,
+                                         PROV_CTX *provctx,
+                                         const char *propq)
+{
+    OSSL_LIB_CTX *libctx = PROV_LIBCTX_OF(provctx);
+    const ML_DSA_PARAMS *kp;
+    COMPOSITE_KEY *key;
+    size_t ml_dsa_len;
+
+    if (pk == NULL || pk_len <= 0 || classic_alg == NULL)
+        return NULL;
+
+    key = ossl_prov_composite_new(provctx, propq, ml_dsa_evp_type);
+    if (key == NULL)
+        return NULL;
+
+    kp = ossl_ml_dsa_key_params(key->ml_dsa_key);
+    if (kp == NULL)
+        goto err;
+
+    ml_dsa_len = kp->pk_len;
+    if ((size_t)pk_len <= ml_dsa_len)
+        goto err;
+
+    if (!ossl_ml_dsa_pk_decode(key->ml_dsa_key, pk, ml_dsa_len)) {
+        ERR_raise(ERR_LIB_PROV, PROV_R_BAD_ENCODING);
+        goto err;
+    }
+
+    key->classic_key = composite_codecs_decode_classic_pub(
+        libctx, classic_alg, ec_curve,
+        pk + ml_dsa_len, (size_t)pk_len - ml_dsa_len);
+    if (key->classic_key == NULL)
+        goto err;
+
+    return key;
+
+err:
+    ossl_composite_key_free(key);
+    return NULL;
+}
+
+COMPOSITE_KEY *ossl_composite_d2i_prvkey(const unsigned char *priv,
+                                         int priv_len,
+                                         int ml_dsa_evp_type,
+                                         const char *classic_alg,
+                                         const char *ec_curve,
+                                         PROV_CTX *provctx,
+                                         const char *propq)
+{
+    OSSL_LIB_CTX *libctx = PROV_LIBCTX_OF(provctx);
+    COMPOSITE_KEY *key;
+
+    if (priv == NULL || priv_len <= ML_DSA_SEED_BYTES || classic_alg == NULL)
+        return NULL;
+
+    key = ossl_prov_composite_new(provctx, propq, ml_dsa_evp_type);
+    if (key == NULL)
+        return NULL;
+
+    /* Load the 32-byte seed and derive the full ML-DSA key pair */
+    if (!ossl_ml_dsa_set_prekey(key->ml_dsa_key, 0, 0,
+                                priv, ML_DSA_SEED_BYTES, NULL, 0)) {
+        ERR_raise(ERR_LIB_PROV, PROV_R_BAD_ENCODING);
+        goto err;
+    }
+    if (!ossl_ml_dsa_generate_key(key->ml_dsa_key)) {
+        ERR_raise(ERR_LIB_PROV, PROV_R_FAILED_TO_GENERATE_KEY);
+        goto err;
+    }
+
+    key->classic_key = composite_codecs_decode_classic_priv(
+        libctx, classic_alg, ec_curve,
+        priv + ML_DSA_SEED_BYTES,
+        (size_t)priv_len - ML_DSA_SEED_BYTES);
+    if (key->classic_key == NULL)
+        goto err;
+
+    return key;
+
+err:
+    ossl_composite_key_free(key);
+    return NULL;
 }
 
 #endif /* OPENSSL_NO_COMPOSITE */

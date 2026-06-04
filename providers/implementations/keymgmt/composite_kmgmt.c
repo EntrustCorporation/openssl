@@ -75,7 +75,7 @@ static COMPOSITE_KEY *ossl_composite_key_new(OSSL_LIB_CTX *libctx,
     return key;
 }
 
-static void ossl_composite_key_free(COMPOSITE_KEY *key)
+void ossl_composite_key_free(COMPOSITE_KEY *key)
 {
     if (key == NULL)
         return;

@@ -163,13 +163,14 @@ typedef struct {
     const char *prehash_alg;
     size_t prehash_len;
 
-    /* ML DSA */
-    PROV_CTX *mldsa_ctx;
-
     /* CLASSIC */
     EVP_PKEY_CTX *classic_ctx;
 
     COMPOSITE_KEY *key;
 } PROV_COMPOSITE_CTX;
+
+COMPOSITE_KEY *ossl_prov_composite_new(PROV_CTX *ctx, const char *propq,
+                                       int ml_dsa_evp_type);
+void ossl_composite_key_free(COMPOSITE_KEY *key);
 
 #endif /* PROV_COMPOSITE_H */

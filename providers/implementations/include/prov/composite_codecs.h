@@ -15,6 +15,7 @@
 #  include <openssl/bio.h>
 #  include <openssl/e_os2.h>
 #  include "prov/composite.h"
+#  include "prov/provider_ctx.h"
 
 /*
  * Encode the composite public key (mldsaPK || tradPK) into *out.
@@ -38,6 +39,39 @@ __owur int ossl_composite_i2d_prvkey(const COMPOSITE_KEY *key,
  */
 __owur int ossl_composite_key_to_text(BIO *out, const COMPOSITE_KEY *key,
                                       int selection);
+
+/*
+ * Decode a composite public key from its wire format (mldsaPK || tradPK).
+ * |pk|/|pk_len|: raw concatenated public key bytes (BIT STRING content
+ *   from SubjectPublicKeyInfo).
+ * |ml_dsa_evp_type|: EVP_PKEY_ML_DSA_44/65/87 selecting the ML-DSA variant.
+ * |classic_alg|: "RSA", "EC", "ED25519", or "ED448".
+ * |ec_curve|: curve name for EC (e.g. "P-256"), NULL for non-EC.
+ * |provctx|: provider context for library context and propq.
+ * |propq|: property query string (may be NULL).
+ * Returns a newly allocated COMPOSITE_KEY on success, NULL on failure.
+ */
+__owur COMPOSITE_KEY *ossl_composite_d2i_pubkey(const unsigned char *pk,
+                                                int pk_len,
+                                                int ml_dsa_evp_type,
+                                                const char *classic_alg,
+                                                const char *ec_curve,
+                                                PROV_CTX *provctx,
+                                                const char *propq);
+
+/*
+ * Decode a composite private key from its wire format (mldsaSeed[32] || tradSK).
+ * |priv|/|priv_len|: raw concatenated private key bytes.
+ * Other params: same as ossl_composite_d2i_pubkey.
+ * Returns a newly allocated COMPOSITE_KEY on success, NULL on failure.
+ */
+__owur COMPOSITE_KEY *ossl_composite_d2i_prvkey(const unsigned char *priv,
+                                                int priv_len,
+                                                int ml_dsa_evp_type,
+                                                const char *classic_alg,
+                                                const char *ec_curve,
+                                                PROV_CTX *provctx,
+                                                const char *propq);
 
 # endif /* OPENSSL_NO_COMPOSITE */
 #endif /* PROV_COMPOSITE_CODECS_H */
