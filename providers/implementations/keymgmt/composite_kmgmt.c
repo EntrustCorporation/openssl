@@ -18,7 +18,6 @@
 #include "crypto/evp.h"
 #include "crypto/ml_dsa.h"
 #include "internal/param_build_set.h"
-#include "internal/param_names.h"
 #include "prov/implementations.h"
 #include "prov/providercommon.h"
 #include "prov/provider_ctx.h"
