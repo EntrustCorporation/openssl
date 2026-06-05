@@ -67,104 +67,116 @@ typedef struct {
     const char *label;       /* ASCII label for M' and ML-DSA ctx per draft §6 */
     const unsigned char *oid;
     size_t oid_sz;
-    const char *prehash_alg; /* hash for M' and classic signing */
+    const char *prehash_alg; /* hash for composite PH(M) only */
     size_t prehash_len;      /* prehash output length in bytes */
+    const char *classic_hash; /* hash for traditional component signing (may differ
+                               * from prehash_alg per draft-ietf-lamps-pq-composite-sigs §6);
+                               * NULL for EdDSA (no digest arg needed) */
     COMPOSITE_CLASSIC_TYPE classic_type;
     int pss_salt_len;        /* RSA-PSS only; 0 otherwise */
-    const char *mgf1_hash;   /* RSA-PSS MGF1 hash; NULL = same as prehash_alg */
+    const char *mgf1_hash;   /* RSA-PSS MGF1 hash; NULL = same as classic_hash */
 } COMPOSITE_ALG_INFO;
 
+/*
+ * prehash_alg: hash used for the composite PH(M) step.
+ * classic_hash: hash used by the traditional component signature algorithm,
+ *               which may differ from prehash_alg per draft-ietf-lamps-pq-composite-sigs §6;
+ *               NULL for EdDSA variants (no digest argument).
+ * mgf1_hash: RSA-PSS MGF1 hash override; NULL = same as classic_hash.
+ */
 static const COMPOSITE_ALG_INFO composite_alg_table[] = {
+    /* name,  label,  oid, oid_sz,  prehash, phlen, classic_hash,
+       classic_type, pss_salt_len, mgf1_hash */
     { "ML-DSA-44-RSA2048-PSS-SHA256",
       "COMPSIG-MLDSA44-RSA2048-PSS-SHA256",
       ossl_der_oid_id_mldsa44_rsa2048_pss_sha256,
       DER_OID_SZ_id_mldsa44_rsa2048_pss_sha256,
-      "SHA-256", 32, COMPOSITE_CLASSIC_RSA_PSS, 32, NULL },
+      "SHA-256", 32, "SHA-256", COMPOSITE_CLASSIC_RSA_PSS, 32, NULL },
     { "ML-DSA-44-RSA2048-PKCS15-SHA256",
       "COMPSIG-MLDSA44-RSA2048-PKCS15-SHA256",
       ossl_der_oid_id_mldsa44_rsa2048_pkcs15_sha256,
       DER_OID_SZ_id_mldsa44_rsa2048_pkcs15_sha256,
-      "SHA-256", 32, COMPOSITE_CLASSIC_RSA_PKCS15, 0, NULL },
+      "SHA-256", 32, "SHA-256", COMPOSITE_CLASSIC_RSA_PKCS15, 0, NULL },
     { "ML-DSA-44-Ed25519-SHA512",
       "COMPSIG-MLDSA44-Ed25519-SHA512",
       ossl_der_oid_id_mldsa44_ed25519_sha512,
       DER_OID_SZ_id_mldsa44_ed25519_sha512,
-      "SHA-512", 64, COMPOSITE_CLASSIC_ED25519, 0, NULL },
+      "SHA-512", 64, NULL, COMPOSITE_CLASSIC_ED25519, 0, NULL },
     { "ML-DSA-44-ECDSA-P256-SHA256",
       "COMPSIG-MLDSA44-ECDSA-P256-SHA256",
       ossl_der_oid_id_mldsa44_ecdsa_p256_sha256,
       DER_OID_SZ_id_mldsa44_ecdsa_p256_sha256,
-      "SHA-256", 32, COMPOSITE_CLASSIC_ECDSA, 0, NULL },
-    { "ML-DSA-65-RSA3072-PSS-SHA512",
+      "SHA-256", 32, "SHA-256", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
+    { "ML-DSA-65-RSA3072-PSS-SHA512",       
       "COMPSIG-MLDSA65-RSA3072-PSS-SHA512",
       ossl_der_oid_id_mldsa65_rsa3072_pss_sha512,
       DER_OID_SZ_id_mldsa65_rsa3072_pss_sha512,
-      "SHA-512", 64, COMPOSITE_CLASSIC_RSA_PSS, 32, NULL },
-    { "ML-DSA-65-RSA3072-PKCS15-SHA512",
+      "SHA-512", 64, "SHA-256", COMPOSITE_CLASSIC_RSA_PSS, 32, NULL },
+    { "ML-DSA-65-RSA3072-PKCS15-SHA512",    /* sha256WithRSAEncryption */
       "COMPSIG-MLDSA65-RSA3072-PKCS15-SHA512",
       ossl_der_oid_id_mldsa65_rsa3072_pkcs15_sha512,
       DER_OID_SZ_id_mldsa65_rsa3072_pkcs15_sha512,
-      "SHA-512", 64, COMPOSITE_CLASSIC_RSA_PKCS15, 0, NULL },
-    { "ML-DSA-65-RSA4096-PSS-SHA512",
+      "SHA-512", 64, "SHA-256", COMPOSITE_CLASSIC_RSA_PKCS15, 0, NULL },
+    { "ML-DSA-65-RSA4096-PSS-SHA512",      
       "COMPSIG-MLDSA65-RSA4096-PSS-SHA512",
       ossl_der_oid_id_mldsa65_rsa4096_pss_sha512,
       DER_OID_SZ_id_mldsa65_rsa4096_pss_sha512,
-      "SHA-512", 64, COMPOSITE_CLASSIC_RSA_PSS, 48, "SHA-384" },
-    { "ML-DSA-65-RSA4096-PKCS15-SHA512",
+      "SHA-512", 64, "SHA-384", COMPOSITE_CLASSIC_RSA_PSS, 48, NULL },
+    { "ML-DSA-65-RSA4096-PKCS15-SHA512",    /* sha384WithRSAEncryption */
       "COMPSIG-MLDSA65-RSA4096-PKCS15-SHA512",
       ossl_der_oid_id_mldsa65_rsa4096_pkcs15_sha512,
       DER_OID_SZ_id_mldsa65_rsa4096_pkcs15_sha512,
-      "SHA-512", 64, COMPOSITE_CLASSIC_RSA_PKCS15, 0, NULL },
-    { "ML-DSA-65-ECDSA-P256-SHA512",
+      "SHA-512", 64, "SHA-384", COMPOSITE_CLASSIC_RSA_PKCS15, 0, NULL },
+    { "ML-DSA-65-ECDSA-P256-SHA512",        /* ecdsa-with-SHA256 */
       "COMPSIG-MLDSA65-ECDSA-P256-SHA512",
       ossl_der_oid_id_mldsa65_ecdsa_p256_sha512,
       DER_OID_SZ_id_mldsa65_ecdsa_p256_sha512,
-      "SHA-512", 64, COMPOSITE_CLASSIC_ECDSA, 0, NULL },
-    { "ML-DSA-65-ECDSA-P384-SHA512",
+      "SHA-512", 64, "SHA-256", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
+    { "ML-DSA-65-ECDSA-P384-SHA512",        /* ecdsa-with-SHA384 */
       "COMPSIG-MLDSA65-ECDSA-P384-SHA512",
       ossl_der_oid_id_mldsa65_ecdsa_p384_sha512,
       DER_OID_SZ_id_mldsa65_ecdsa_p384_sha512,
-      "SHA-512", 64, COMPOSITE_CLASSIC_ECDSA, 0, NULL },
-    { "ML-DSA-65-ECDSA-brainpoolP256r1-SHA512",
+      "SHA-512", 64, "SHA-384", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
+    { "ML-DSA-65-ECDSA-brainpoolP256r1-SHA512", /* ecdsa-with-SHA256 */
       "COMPSIG-MLDSA65-ECDSA-BP256-SHA512",
       ossl_der_oid_id_mldsa65_ecdsa_brainpoolP256r1_sha512,
       DER_OID_SZ_id_mldsa65_ecdsa_brainpoolP256r1_sha512,
-      "SHA-512", 64, COMPOSITE_CLASSIC_ECDSA, 0, NULL },
+      "SHA-512", 64, "SHA-256", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
     { "ML-DSA-65-Ed25519-SHA512",
       "COMPSIG-MLDSA65-Ed25519-SHA512",
       ossl_der_oid_id_mldsa65_ed25519_sha512,
       DER_OID_SZ_id_mldsa65_ed25519_sha512,
-      "SHA-512", 64, COMPOSITE_CLASSIC_ED25519, 0, NULL },
-    { "ML-DSA-87-ECDSA-P384-SHA512",
+      "SHA-512", 64, NULL, COMPOSITE_CLASSIC_ED25519, 0, NULL },
+    { "ML-DSA-87-ECDSA-P384-SHA512",        /* ecdsa-with-SHA384 */
       "COMPSIG-MLDSA87-ECDSA-P384-SHA512",
       ossl_der_oid_id_mldsa87_ecdsa_p384_sha512,
       DER_OID_SZ_id_mldsa87_ecdsa_p384_sha512,
-      "SHA-512", 64, COMPOSITE_CLASSIC_ECDSA, 0, NULL },
-    { "ML-DSA-87-ECDSA-brainpoolP384r1-SHA512",
+      "SHA-512", 64, "SHA-384", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
+    { "ML-DSA-87-ECDSA-brainpoolP384r1-SHA512", /* ecdsa-with-SHA384 */
       "COMPSIG-MLDSA87-ECDSA-BP384-SHA512",
       ossl_der_oid_id_mldsa87_ecdsa_brainpoolp384r1_sha512,
       DER_OID_SZ_id_mldsa87_ecdsa_brainpoolp384r1_sha512,
-      "SHA-512", 64, COMPOSITE_CLASSIC_ECDSA, 0, NULL },
+      "SHA-512", 64, "SHA-384", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
     { "ML-DSA-87-Ed448-SHAKE256",
       "COMPSIG-MLDSA87-Ed448-SHAKE256",
       ossl_der_oid_id_mldsa87_ed448_shake256,
       DER_OID_SZ_id_mldsa87_ed448_shake256,
-      "SHAKE256", 64, COMPOSITE_CLASSIC_ED448, 0, NULL },
-    { "ML-DSA-87-RSA3072-PSS-SHA512",
+      "SHAKE256", 64, NULL, COMPOSITE_CLASSIC_ED448, 0, NULL },
+    { "ML-DSA-87-RSA3072-PSS-SHA512",      
       "COMPSIG-MLDSA87-RSA3072-PSS-SHA512",
       ossl_der_oid_id_mldsa87_rsa3072_pss_sha512,
       DER_OID_SZ_id_mldsa87_rsa3072_pss_sha512,
-      "SHA-512", 64, COMPOSITE_CLASSIC_RSA_PSS, 32, NULL },
-    { "ML-DSA-87-RSA4096-PSS-SHA512",
+      "SHA-512", 64, "SHA-256", COMPOSITE_CLASSIC_RSA_PSS, 32, NULL },
+    { "ML-DSA-87-RSA4096-PSS-SHA512",      
       "COMPSIG-MLDSA87-RSA4096-PSS-SHA512",
       ossl_der_oid_id_mldsa87_rsa4096_pss_sha512,
       DER_OID_SZ_id_mldsa87_rsa4096_pss_sha512,
-      "SHA-512", 64, COMPOSITE_CLASSIC_RSA_PSS, 48, "SHA-384" },
-    { "ML-DSA-87-ECDSA-P521-SHA512",
+      "SHA-512", 64, "SHA-384", COMPOSITE_CLASSIC_RSA_PSS, 48, NULL },
+    { "ML-DSA-87-ECDSA-P521-SHA512",        /* ecdsa-with-SHA512 */
       "COMPSIG-MLDSA87-ECDSA-P521-SHA512",
       ossl_der_oid_id_mldsa87_ecdsa_p521_sha512,
       DER_OID_SZ_id_mldsa87_ecdsa_p521_sha512,
-      "SHA-512", 64, COMPOSITE_CLASSIC_ECDSA, 0, NULL },
+      "SHA-512", 64, "SHA-512", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
 };
 #define COMPOSITE_NUM_ALGS \
     (sizeof(composite_alg_table) / sizeof(composite_alg_table[0]))
@@ -223,7 +235,7 @@ static int composite_classic_sign(PROV_COMPOSITE_CTX *ctx,
     switch (info->classic_type) {
     case COMPOSITE_CLASSIC_ED25519:
     case COMPOSITE_CLASSIC_ED448:
-        /* Pure EdDSA: pass NULL as the digest name */
+        /* Pure EdDSA: no external digest */
         if (!EVP_DigestSignInit_ex(md_ctx, NULL, NULL,
                                    ctx->libctx, NULL,
                                    ctx->key->classic_key, NULL))
@@ -231,20 +243,20 @@ static int composite_classic_sign(PROV_COMPOSITE_CTX *ctx,
         break;
 
     case COMPOSITE_CLASSIC_ECDSA:
-        if (!EVP_DigestSignInit_ex(md_ctx, NULL, info->prehash_alg,
+        if (!EVP_DigestSignInit_ex(md_ctx, NULL, info->classic_hash,
                                    ctx->libctx, NULL,
                                    ctx->key->classic_key, NULL))
             goto err;
         break;
 
     case COMPOSITE_CLASSIC_RSA_PSS:
-        if (!EVP_DigestSignInit_ex(md_ctx, &pctx, info->prehash_alg,
+        if (!EVP_DigestSignInit_ex(md_ctx, &pctx, info->classic_hash,
                                    ctx->libctx, NULL,
                                    ctx->key->classic_key, NULL))
             goto err;
         {
             const char *mgf1 = (info->mgf1_hash != NULL)
-                                ? info->mgf1_hash : info->prehash_alg;
+                                ? info->mgf1_hash : info->classic_hash;
             if (EVP_PKEY_CTX_set_rsa_padding(pctx, RSA_PKCS1_PSS_PADDING) <= 0
                 || EVP_PKEY_CTX_set_rsa_pss_saltlen(pctx, info->pss_salt_len) <= 0
                 || EVP_PKEY_CTX_set_rsa_mgf1_md_name(pctx, mgf1, NULL) <= 0)
@@ -253,7 +265,7 @@ static int composite_classic_sign(PROV_COMPOSITE_CTX *ctx,
         break;
 
     case COMPOSITE_CLASSIC_RSA_PKCS15:
-        if (!EVP_DigestSignInit_ex(md_ctx, &pctx, info->prehash_alg,
+        if (!EVP_DigestSignInit_ex(md_ctx, &pctx, info->classic_hash,
                                    ctx->libctx, NULL,
                                    ctx->key->classic_key, NULL))
             goto err;
@@ -502,20 +514,20 @@ static int composite_verify(void *vctx, const uint8_t *sig, size_t siglen,
         break;
 
     case COMPOSITE_CLASSIC_ECDSA:
-        if (!EVP_DigestVerifyInit_ex(md_ctx, NULL, info->prehash_alg,
+        if (!EVP_DigestVerifyInit_ex(md_ctx, NULL, info->classic_hash,
                                     ctx->libctx, NULL,
                                     ctx->key->classic_key, NULL))
             goto err;
         break;
 
     case COMPOSITE_CLASSIC_RSA_PSS:
-        if (!EVP_DigestVerifyInit_ex(md_ctx, &pctx, info->prehash_alg,
+        if (!EVP_DigestVerifyInit_ex(md_ctx, &pctx, info->classic_hash,
                                     ctx->libctx, NULL,
                                     ctx->key->classic_key, NULL))
             goto err;
         {
             const char *mgf1 = (info->mgf1_hash != NULL)
-                               ? info->mgf1_hash : info->prehash_alg;
+                               ? info->mgf1_hash : info->classic_hash;
             if (EVP_PKEY_CTX_set_rsa_padding(pctx, RSA_PKCS1_PSS_PADDING) <= 0
                 || EVP_PKEY_CTX_set_rsa_pss_saltlen(pctx, info->pss_salt_len) <= 0
                 || EVP_PKEY_CTX_set_rsa_mgf1_md_name(pctx, mgf1, NULL) <= 0)
@@ -524,7 +536,7 @@ static int composite_verify(void *vctx, const uint8_t *sig, size_t siglen,
         break;
 
     case COMPOSITE_CLASSIC_RSA_PKCS15:
-        if (!EVP_DigestVerifyInit_ex(md_ctx, &pctx, info->prehash_alg,
+        if (!EVP_DigestVerifyInit_ex(md_ctx, &pctx, info->classic_hash,
                                     ctx->libctx, NULL,
                                     ctx->key->classic_key, NULL))
             goto err;
