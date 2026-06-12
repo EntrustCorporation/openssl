@@ -34,8 +34,8 @@
  * Caller must OPENSSL_free(*out).
  */
 static int composite_encode_classic_pub(const EVP_PKEY *pkey,
-                                         unsigned char **out,
-                                         size_t *out_len)
+    unsigned char **out,
+    size_t *out_len)
 {
     int keytype = EVP_PKEY_get_base_id(pkey);
     OSSL_ENCODER_CTX *ectx;
@@ -56,13 +56,13 @@ static int composite_encode_classic_pub(const EVP_PKEY *pkey,
     } else if (keytype == EVP_PKEY_EC) {
         /* Uncompressed point: 0x04 || x || y */
         if (!EVP_PKEY_get_octet_string_param(pkey, OSSL_PKEY_PARAM_PUB_KEY,
-                                              NULL, 0, &len))
+                NULL, 0, &len))
             return 0;
         *out = OPENSSL_malloc(len);
         if (*out == NULL)
             return 0;
         if (!EVP_PKEY_get_octet_string_param(pkey, OSSL_PKEY_PARAM_PUB_KEY,
-                                              *out, len, out_len)) {
+                *out, len, out_len)) {
             OPENSSL_free(*out);
             *out = NULL;
         }
@@ -80,7 +80,7 @@ static int composite_encode_classic_pub(const EVP_PKEY *pkey,
         }
     } else {
         ERR_raise_data(ERR_LIB_PROV, PROV_R_NOT_SUPPORTED,
-                       "unsupported classic key type %d", keytype);
+            "unsupported classic key type %d", keytype);
         return 0;
     }
 
@@ -99,8 +99,8 @@ static int composite_encode_classic_pub(const EVP_PKEY *pkey,
  * Caller must OPENSSL_clear_free(*out, *out_len).
  */
 static int composite_encode_classic_priv(const EVP_PKEY *pkey,
-                                          unsigned char **out,
-                                          size_t *out_len)
+    unsigned char **out,
+    size_t *out_len)
 {
     int keytype = EVP_PKEY_get_base_id(pkey);
     OSSL_ENCODER_CTX *ectx;
@@ -129,7 +129,7 @@ static int composite_encode_classic_priv(const EVP_PKEY *pkey,
         int include_pub = 0;
         OSSL_PARAM params[] = {
             OSSL_PARAM_construct_int(OSSL_PKEY_PARAM_EC_INCLUDE_PUBLIC,
-                                     &include_pub),
+                &include_pub),
             OSSL_PARAM_construct_end()
         };
         EVP_PKEY *ec_copy = EVP_PKEY_dup(pkey);
@@ -163,7 +163,7 @@ static int composite_encode_classic_priv(const EVP_PKEY *pkey,
         }
     } else {
         ERR_raise_data(ERR_LIB_PROV, PROV_R_NOT_SUPPORTED,
-                       "unsupported classic key type %d", keytype);
+            "unsupported classic key type %d", keytype);
         return 0;
     }
 
@@ -196,7 +196,7 @@ int ossl_composite_i2d_pubkey(const COMPOSITE_KEY *key, unsigned char **out)
     }
 
     if (!composite_encode_classic_pub(key->classic_key,
-                                      &classic_pub, &classic_pub_len))
+            &classic_pub, &classic_pub_len))
         return 0;
 
     total = (int)(kp->pk_len + classic_pub_len);
@@ -239,7 +239,7 @@ int ossl_composite_i2d_prvkey(const COMPOSITE_KEY *key, unsigned char **out)
     }
 
     if (!composite_encode_classic_priv(key->classic_key,
-                                       &classic_priv, &classic_priv_len))
+            &classic_priv, &classic_priv_len))
         return 0;
 
     total = (int)(ML_DSA_SEED_BYTES + classic_priv_len);
@@ -262,7 +262,7 @@ done:
  * Print a human-readable description of a composite key to |out|.
  */
 int ossl_composite_key_to_text(BIO *out, const COMPOSITE_KEY *key,
-                                int selection)
+    int selection)
 {
     const ML_DSA_PARAMS *kp;
     int is_priv = (selection & OSSL_KEYMGMT_SELECT_PRIVATE_KEY) != 0;
@@ -276,8 +276,9 @@ int ossl_composite_key_to_text(BIO *out, const COMPOSITE_KEY *key,
     kp = ossl_ml_dsa_key_params(key->ml_dsa_key);
 
     if (BIO_printf(out, "Composite %s Key (%s)\n",
-                   is_priv ? "Private" : "Public",
-                   kp != NULL ? kp->alg : "unknown") <= 0)
+            is_priv ? "Private" : "Public",
+            kp != NULL ? kp->alg : "unknown")
+        <= 0)
         return 0;
 
     /* ML-DSA component */
@@ -309,10 +310,10 @@ int ossl_composite_key_to_text(BIO *out, const COMPOSITE_KEY *key,
  * Used by ossl_composite_d2i_pubkey() and ossl_composite_d2i_prvkey().
  */
 static EVP_PKEY *composite_codecs_decode_classic_pub(OSSL_LIB_CTX *libctx,
-                                                     const char *classic_alg,
-                                                     const char *ec_curve,
-                                                     const unsigned char *buf,
-                                                     size_t buf_len)
+    const char *classic_alg,
+    const char *ec_curve,
+    const unsigned char *buf,
+    size_t buf_len)
 {
     EVP_PKEY *pkey = NULL;
     const unsigned char *ptr = buf;
@@ -341,24 +342,25 @@ static EVP_PKEY *composite_codecs_decode_classic_pub(OSSL_LIB_CTX *libctx,
             return NULL;
         if (EVP_PKEY_fromdata_init(pctx) <= 0
             || EVP_PKEY_fromdata(pctx, &pkey,
-                                 EVP_PKEY_PUBLIC_KEY, params) <= 0)
+                   EVP_PKEY_PUBLIC_KEY, params)
+                <= 0)
             pkey = NULL;
         EVP_PKEY_CTX_free(pctx);
     } else if (strcmp(classic_alg, "ED25519") == 0) {
         pkey = EVP_PKEY_new_raw_public_key_ex(libctx, "ED25519", NULL,
-                                              buf, buf_len);
+            buf, buf_len);
     } else if (strcmp(classic_alg, "ED448") == 0) {
         pkey = EVP_PKEY_new_raw_public_key_ex(libctx, "ED448", NULL,
-                                              buf, buf_len);
+            buf, buf_len);
     }
     return pkey;
 }
 
 static EVP_PKEY *composite_codecs_decode_classic_priv(OSSL_LIB_CTX *libctx,
-                                                      const char *classic_alg,
-                                                      const char *ec_curve,
-                                                      const unsigned char *buf,
-                                                      size_t buf_len)
+    const char *classic_alg,
+    const char *ec_curve,
+    const unsigned char *buf,
+    size_t buf_len)
 {
     EVP_PKEY *pkey = NULL;
     const unsigned char *ptr = buf;
@@ -385,21 +387,21 @@ static EVP_PKEY *composite_codecs_decode_classic_priv(OSSL_LIB_CTX *libctx,
         OSSL_DECODER_CTX_free(dctx);
     } else if (strcmp(classic_alg, "ED25519") == 0) {
         pkey = EVP_PKEY_new_raw_private_key_ex(libctx, "ED25519", NULL,
-                                               buf, buf_len);
+            buf, buf_len);
     } else if (strcmp(classic_alg, "ED448") == 0) {
         pkey = EVP_PKEY_new_raw_private_key_ex(libctx, "ED448", NULL,
-                                               buf, buf_len);
+            buf, buf_len);
     }
     return pkey;
 }
 
 COMPOSITE_KEY *ossl_composite_d2i_pubkey(const unsigned char *pk,
-                                         int pk_len,
-                                         int ml_dsa_evp_type,
-                                         const char *classic_alg,
-                                         const char *ec_curve,
-                                         PROV_CTX *provctx,
-                                         const char *propq)
+    int pk_len,
+    int ml_dsa_evp_type,
+    const char *classic_alg,
+    const char *ec_curve,
+    PROV_CTX *provctx,
+    const char *propq)
 {
     OSSL_LIB_CTX *libctx = PROV_LIBCTX_OF(provctx);
     const ML_DSA_PARAMS *kp;
@@ -440,12 +442,12 @@ err:
 }
 
 COMPOSITE_KEY *ossl_composite_d2i_prvkey(const unsigned char *priv,
-                                         int priv_len,
-                                         int ml_dsa_evp_type,
-                                         const char *classic_alg,
-                                         const char *ec_curve,
-                                         PROV_CTX *provctx,
-                                         const char *propq)
+    int priv_len,
+    int ml_dsa_evp_type,
+    const char *classic_alg,
+    const char *ec_curve,
+    PROV_CTX *provctx,
+    const char *propq)
 {
     OSSL_LIB_CTX *libctx = PROV_LIBCTX_OF(provctx);
     COMPOSITE_KEY *key;
@@ -459,7 +461,7 @@ COMPOSITE_KEY *ossl_composite_d2i_prvkey(const unsigned char *priv,
 
     /* Load the 32-byte seed and derive the full ML-DSA key pair */
     if (!ossl_ml_dsa_set_prekey(key->ml_dsa_key, 0, 0,
-                                priv, ML_DSA_SEED_BYTES, NULL, 0)) {
+            priv, ML_DSA_SEED_BYTES, NULL, 0)) {
         ERR_raise(ERR_LIB_PROV, PROV_R_BAD_ENCODING);
         goto err;
     }

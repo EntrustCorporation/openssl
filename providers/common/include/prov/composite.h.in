@@ -10,7 +10,7 @@
  */
 
 #ifndef PROV_COMPOSITE_H
-# define PROV_COMPOSITE_H
+#define PROV_COMPOSITE_H
 
 #include "internal/der.h"
 #include "crypto/ml_dsa.h"
@@ -19,15 +19,16 @@
 #define COMPOSITE_PREFIX "436F6D706F73697465416C676F726974686D5369676E61747572657332303235"
 
 /* Well known OIDs precompiled */
-{-
-    $OUT = oids_to_c::process_leaves('providers/common/der/composite.asn1',
-                                     { dir => $config{sourcedir},
-                                       filter => \&oids_to_c::filter_to_H });
--}
+{
+    -$OUT = oids_to_c::process_leaves('providers/common/der/composite.asn1',
+        { dir = > $config { sourcedir },
+            filter = > \& oids_to_c::filter_to_H });
+    -
+}
 
 typedef struct {
-  ML_DSA_KEY *ml_dsa_key;
-  EVP_PKEY *classic_key;
+    ML_DSA_KEY *ml_dsa_key;
+    EVP_PKEY *classic_key;
 } COMPOSITE_KEY;
 
 typedef struct {
@@ -47,7 +48,7 @@ typedef struct {
 } PROV_COMPOSITE_CTX;
 
 COMPOSITE_KEY *ossl_prov_composite_new(PROV_CTX *ctx, const char *propq,
-                                       int ml_dsa_evp_type);
+    int ml_dsa_evp_type);
 void ossl_composite_key_free(COMPOSITE_KEY *key);
 
 #endif /* PROV_COMPOSITE_H */

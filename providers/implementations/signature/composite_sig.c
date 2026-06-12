@@ -31,10 +31,10 @@
  *   436F6D706F73697465416C676F726974686D5369676E61747572657332303235
  */
 static const uint8_t composite_sig_prefix[32] = {
-    0x43, 0x6F, 0x6D, 0x70, 0x6F, 0x73, 0x69, 0x74,  /* Composit */
-    0x65, 0x41, 0x6C, 0x67, 0x6F, 0x72, 0x69, 0x74,  /* eAlgorit */
-    0x68, 0x6D, 0x53, 0x69, 0x67, 0x6E, 0x61, 0x74,  /* hmSignat */
-    0x75, 0x72, 0x65, 0x73, 0x32, 0x30, 0x32, 0x35   /* ures2025 */
+    0x43, 0x6F, 0x6D, 0x70, 0x6F, 0x73, 0x69, 0x74, /* Composit */
+    0x65, 0x41, 0x6C, 0x67, 0x6F, 0x72, 0x69, 0x74, /* eAlgorit */
+    0x68, 0x6D, 0x53, 0x69, 0x67, 0x6E, 0x61, 0x74, /* hmSignat */
+    0x75, 0x72, 0x65, 0x73, 0x32, 0x30, 0x32, 0x35 /* ures2025 */
 };
 
 static OSSL_FUNC_signature_sign_fn composite_sign;
@@ -64,17 +64,17 @@ typedef enum {
 
 typedef struct {
     const char *name;
-    const char *label;       /* ASCII label for M' and ML-DSA ctx per draft §6 */
+    const char *label; /* ASCII label for M' and ML-DSA ctx per draft §6 */
     const unsigned char *oid;
     size_t oid_sz;
     const char *prehash_alg; /* hash for composite PH(M) only */
-    size_t prehash_len;      /* prehash output length in bytes */
+    size_t prehash_len; /* prehash output length in bytes */
     const char *classic_hash; /* hash for traditional component signing (may differ
                                * from prehash_alg per draft-ietf-lamps-pq-composite-sigs §6);
                                * NULL for EdDSA (no digest arg needed) */
     COMPOSITE_CLASSIC_TYPE classic_type;
-    int pss_salt_len;        /* RSA-PSS only; 0 otherwise */
-    const char *mgf1_hash;   /* RSA-PSS MGF1 hash; NULL = same as classic_hash */
+    int pss_salt_len; /* RSA-PSS only; 0 otherwise */
+    const char *mgf1_hash; /* RSA-PSS MGF1 hash; NULL = same as classic_hash */
 } COMPOSITE_ALG_INFO;
 
 /*
@@ -88,95 +88,95 @@ static const COMPOSITE_ALG_INFO composite_alg_table[] = {
     /* name,  label,  oid, oid_sz,  prehash, phlen, classic_hash,
        classic_type, pss_salt_len, mgf1_hash */
     { "ML-DSA-44-RSA2048-PSS-SHA256",
-      "COMPSIG-MLDSA44-RSA2048-PSS-SHA256",
-      ossl_der_oid_id_mldsa44_rsa2048_pss_sha256,
-      DER_OID_SZ_id_mldsa44_rsa2048_pss_sha256,
-      "SHA-256", 32, "SHA-256", COMPOSITE_CLASSIC_RSA_PSS, 32, NULL },
+        "COMPSIG-MLDSA44-RSA2048-PSS-SHA256",
+        ossl_der_oid_id_mldsa44_rsa2048_pss_sha256,
+        DER_OID_SZ_id_mldsa44_rsa2048_pss_sha256,
+        "SHA-256", 32, "SHA-256", COMPOSITE_CLASSIC_RSA_PSS, 32, NULL },
     { "ML-DSA-44-RSA2048-PKCS15-SHA256",
-      "COMPSIG-MLDSA44-RSA2048-PKCS15-SHA256",
-      ossl_der_oid_id_mldsa44_rsa2048_pkcs15_sha256,
-      DER_OID_SZ_id_mldsa44_rsa2048_pkcs15_sha256,
-      "SHA-256", 32, "SHA-256", COMPOSITE_CLASSIC_RSA_PKCS15, 0, NULL },
+        "COMPSIG-MLDSA44-RSA2048-PKCS15-SHA256",
+        ossl_der_oid_id_mldsa44_rsa2048_pkcs15_sha256,
+        DER_OID_SZ_id_mldsa44_rsa2048_pkcs15_sha256,
+        "SHA-256", 32, "SHA-256", COMPOSITE_CLASSIC_RSA_PKCS15, 0, NULL },
     { "ML-DSA-44-Ed25519-SHA512",
-      "COMPSIG-MLDSA44-Ed25519-SHA512",
-      ossl_der_oid_id_mldsa44_ed25519_sha512,
-      DER_OID_SZ_id_mldsa44_ed25519_sha512,
-      "SHA-512", 64, NULL, COMPOSITE_CLASSIC_ED25519, 0, NULL },
+        "COMPSIG-MLDSA44-Ed25519-SHA512",
+        ossl_der_oid_id_mldsa44_ed25519_sha512,
+        DER_OID_SZ_id_mldsa44_ed25519_sha512,
+        "SHA-512", 64, NULL, COMPOSITE_CLASSIC_ED25519, 0, NULL },
     { "ML-DSA-44-ECDSA-P256-SHA256",
-      "COMPSIG-MLDSA44-ECDSA-P256-SHA256",
-      ossl_der_oid_id_mldsa44_ecdsa_p256_sha256,
-      DER_OID_SZ_id_mldsa44_ecdsa_p256_sha256,
-      "SHA-256", 32, "SHA-256", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
-    { "ML-DSA-65-RSA3072-PSS-SHA512",       
-      "COMPSIG-MLDSA65-RSA3072-PSS-SHA512",
-      ossl_der_oid_id_mldsa65_rsa3072_pss_sha512,
-      DER_OID_SZ_id_mldsa65_rsa3072_pss_sha512,
-      "SHA-512", 64, "SHA-256", COMPOSITE_CLASSIC_RSA_PSS, 32, NULL },
-    { "ML-DSA-65-RSA3072-PKCS15-SHA512",    /* sha256WithRSAEncryption */
-      "COMPSIG-MLDSA65-RSA3072-PKCS15-SHA512",
-      ossl_der_oid_id_mldsa65_rsa3072_pkcs15_sha512,
-      DER_OID_SZ_id_mldsa65_rsa3072_pkcs15_sha512,
-      "SHA-512", 64, "SHA-256", COMPOSITE_CLASSIC_RSA_PKCS15, 0, NULL },
-    { "ML-DSA-65-RSA4096-PSS-SHA512",      
-      "COMPSIG-MLDSA65-RSA4096-PSS-SHA512",
-      ossl_der_oid_id_mldsa65_rsa4096_pss_sha512,
-      DER_OID_SZ_id_mldsa65_rsa4096_pss_sha512,
-      "SHA-512", 64, "SHA-384", COMPOSITE_CLASSIC_RSA_PSS, 48, NULL },
-    { "ML-DSA-65-RSA4096-PKCS15-SHA512",    /* sha384WithRSAEncryption */
-      "COMPSIG-MLDSA65-RSA4096-PKCS15-SHA512",
-      ossl_der_oid_id_mldsa65_rsa4096_pkcs15_sha512,
-      DER_OID_SZ_id_mldsa65_rsa4096_pkcs15_sha512,
-      "SHA-512", 64, "SHA-384", COMPOSITE_CLASSIC_RSA_PKCS15, 0, NULL },
-    { "ML-DSA-65-ECDSA-P256-SHA512",        /* ecdsa-with-SHA256 */
-      "COMPSIG-MLDSA65-ECDSA-P256-SHA512",
-      ossl_der_oid_id_mldsa65_ecdsa_p256_sha512,
-      DER_OID_SZ_id_mldsa65_ecdsa_p256_sha512,
-      "SHA-512", 64, "SHA-256", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
-    { "ML-DSA-65-ECDSA-P384-SHA512",        /* ecdsa-with-SHA384 */
-      "COMPSIG-MLDSA65-ECDSA-P384-SHA512",
-      ossl_der_oid_id_mldsa65_ecdsa_p384_sha512,
-      DER_OID_SZ_id_mldsa65_ecdsa_p384_sha512,
-      "SHA-512", 64, "SHA-384", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
+        "COMPSIG-MLDSA44-ECDSA-P256-SHA256",
+        ossl_der_oid_id_mldsa44_ecdsa_p256_sha256,
+        DER_OID_SZ_id_mldsa44_ecdsa_p256_sha256,
+        "SHA-256", 32, "SHA-256", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
+    { "ML-DSA-65-RSA3072-PSS-SHA512",
+        "COMPSIG-MLDSA65-RSA3072-PSS-SHA512",
+        ossl_der_oid_id_mldsa65_rsa3072_pss_sha512,
+        DER_OID_SZ_id_mldsa65_rsa3072_pss_sha512,
+        "SHA-512", 64, "SHA-256", COMPOSITE_CLASSIC_RSA_PSS, 32, NULL },
+    { "ML-DSA-65-RSA3072-PKCS15-SHA512", /* sha256WithRSAEncryption */
+        "COMPSIG-MLDSA65-RSA3072-PKCS15-SHA512",
+        ossl_der_oid_id_mldsa65_rsa3072_pkcs15_sha512,
+        DER_OID_SZ_id_mldsa65_rsa3072_pkcs15_sha512,
+        "SHA-512", 64, "SHA-256", COMPOSITE_CLASSIC_RSA_PKCS15, 0, NULL },
+    { "ML-DSA-65-RSA4096-PSS-SHA512",
+        "COMPSIG-MLDSA65-RSA4096-PSS-SHA512",
+        ossl_der_oid_id_mldsa65_rsa4096_pss_sha512,
+        DER_OID_SZ_id_mldsa65_rsa4096_pss_sha512,
+        "SHA-512", 64, "SHA-384", COMPOSITE_CLASSIC_RSA_PSS, 48, NULL },
+    { "ML-DSA-65-RSA4096-PKCS15-SHA512", /* sha384WithRSAEncryption */
+        "COMPSIG-MLDSA65-RSA4096-PKCS15-SHA512",
+        ossl_der_oid_id_mldsa65_rsa4096_pkcs15_sha512,
+        DER_OID_SZ_id_mldsa65_rsa4096_pkcs15_sha512,
+        "SHA-512", 64, "SHA-384", COMPOSITE_CLASSIC_RSA_PKCS15, 0, NULL },
+    { "ML-DSA-65-ECDSA-P256-SHA512", /* ecdsa-with-SHA256 */
+        "COMPSIG-MLDSA65-ECDSA-P256-SHA512",
+        ossl_der_oid_id_mldsa65_ecdsa_p256_sha512,
+        DER_OID_SZ_id_mldsa65_ecdsa_p256_sha512,
+        "SHA-512", 64, "SHA-256", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
+    { "ML-DSA-65-ECDSA-P384-SHA512", /* ecdsa-with-SHA384 */
+        "COMPSIG-MLDSA65-ECDSA-P384-SHA512",
+        ossl_der_oid_id_mldsa65_ecdsa_p384_sha512,
+        DER_OID_SZ_id_mldsa65_ecdsa_p384_sha512,
+        "SHA-512", 64, "SHA-384", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
     { "ML-DSA-65-ECDSA-brainpoolP256r1-SHA512", /* ecdsa-with-SHA256 */
-      "COMPSIG-MLDSA65-ECDSA-BP256-SHA512",
-      ossl_der_oid_id_mldsa65_ecdsa_brainpoolP256r1_sha512,
-      DER_OID_SZ_id_mldsa65_ecdsa_brainpoolP256r1_sha512,
-      "SHA-512", 64, "SHA-256", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
+        "COMPSIG-MLDSA65-ECDSA-BP256-SHA512",
+        ossl_der_oid_id_mldsa65_ecdsa_brainpoolP256r1_sha512,
+        DER_OID_SZ_id_mldsa65_ecdsa_brainpoolP256r1_sha512,
+        "SHA-512", 64, "SHA-256", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
     { "ML-DSA-65-Ed25519-SHA512",
-      "COMPSIG-MLDSA65-Ed25519-SHA512",
-      ossl_der_oid_id_mldsa65_ed25519_sha512,
-      DER_OID_SZ_id_mldsa65_ed25519_sha512,
-      "SHA-512", 64, NULL, COMPOSITE_CLASSIC_ED25519, 0, NULL },
-    { "ML-DSA-87-ECDSA-P384-SHA512",        /* ecdsa-with-SHA384 */
-      "COMPSIG-MLDSA87-ECDSA-P384-SHA512",
-      ossl_der_oid_id_mldsa87_ecdsa_p384_sha512,
-      DER_OID_SZ_id_mldsa87_ecdsa_p384_sha512,
-      "SHA-512", 64, "SHA-384", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
+        "COMPSIG-MLDSA65-Ed25519-SHA512",
+        ossl_der_oid_id_mldsa65_ed25519_sha512,
+        DER_OID_SZ_id_mldsa65_ed25519_sha512,
+        "SHA-512", 64, NULL, COMPOSITE_CLASSIC_ED25519, 0, NULL },
+    { "ML-DSA-87-ECDSA-P384-SHA512", /* ecdsa-with-SHA384 */
+        "COMPSIG-MLDSA87-ECDSA-P384-SHA512",
+        ossl_der_oid_id_mldsa87_ecdsa_p384_sha512,
+        DER_OID_SZ_id_mldsa87_ecdsa_p384_sha512,
+        "SHA-512", 64, "SHA-384", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
     { "ML-DSA-87-ECDSA-brainpoolP384r1-SHA512", /* ecdsa-with-SHA384 */
-      "COMPSIG-MLDSA87-ECDSA-BP384-SHA512",
-      ossl_der_oid_id_mldsa87_ecdsa_brainpoolp384r1_sha512,
-      DER_OID_SZ_id_mldsa87_ecdsa_brainpoolp384r1_sha512,
-      "SHA-512", 64, "SHA-384", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
+        "COMPSIG-MLDSA87-ECDSA-BP384-SHA512",
+        ossl_der_oid_id_mldsa87_ecdsa_brainpoolp384r1_sha512,
+        DER_OID_SZ_id_mldsa87_ecdsa_brainpoolp384r1_sha512,
+        "SHA-512", 64, "SHA-384", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
     { "ML-DSA-87-Ed448-SHAKE256",
-      "COMPSIG-MLDSA87-Ed448-SHAKE256",
-      ossl_der_oid_id_mldsa87_ed448_shake256,
-      DER_OID_SZ_id_mldsa87_ed448_shake256,
-      "SHAKE256", 64, NULL, COMPOSITE_CLASSIC_ED448, 0, NULL },
-    { "ML-DSA-87-RSA3072-PSS-SHA512",      
-      "COMPSIG-MLDSA87-RSA3072-PSS-SHA512",
-      ossl_der_oid_id_mldsa87_rsa3072_pss_sha512,
-      DER_OID_SZ_id_mldsa87_rsa3072_pss_sha512,
-      "SHA-512", 64, "SHA-256", COMPOSITE_CLASSIC_RSA_PSS, 32, NULL },
-    { "ML-DSA-87-RSA4096-PSS-SHA512",      
-      "COMPSIG-MLDSA87-RSA4096-PSS-SHA512",
-      ossl_der_oid_id_mldsa87_rsa4096_pss_sha512,
-      DER_OID_SZ_id_mldsa87_rsa4096_pss_sha512,
-      "SHA-512", 64, "SHA-384", COMPOSITE_CLASSIC_RSA_PSS, 48, NULL },
-    { "ML-DSA-87-ECDSA-P521-SHA512",        /* ecdsa-with-SHA512 */
-      "COMPSIG-MLDSA87-ECDSA-P521-SHA512",
-      ossl_der_oid_id_mldsa87_ecdsa_p521_sha512,
-      DER_OID_SZ_id_mldsa87_ecdsa_p521_sha512,
-      "SHA-512", 64, "SHA-512", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
+        "COMPSIG-MLDSA87-Ed448-SHAKE256",
+        ossl_der_oid_id_mldsa87_ed448_shake256,
+        DER_OID_SZ_id_mldsa87_ed448_shake256,
+        "SHAKE256", 64, NULL, COMPOSITE_CLASSIC_ED448, 0, NULL },
+    { "ML-DSA-87-RSA3072-PSS-SHA512",
+        "COMPSIG-MLDSA87-RSA3072-PSS-SHA512",
+        ossl_der_oid_id_mldsa87_rsa3072_pss_sha512,
+        DER_OID_SZ_id_mldsa87_rsa3072_pss_sha512,
+        "SHA-512", 64, "SHA-256", COMPOSITE_CLASSIC_RSA_PSS, 32, NULL },
+    { "ML-DSA-87-RSA4096-PSS-SHA512",
+        "COMPSIG-MLDSA87-RSA4096-PSS-SHA512",
+        ossl_der_oid_id_mldsa87_rsa4096_pss_sha512,
+        DER_OID_SZ_id_mldsa87_rsa4096_pss_sha512,
+        "SHA-512", 64, "SHA-384", COMPOSITE_CLASSIC_RSA_PSS, 48, NULL },
+    { "ML-DSA-87-ECDSA-P521-SHA512", /* ecdsa-with-SHA512 */
+        "COMPSIG-MLDSA87-ECDSA-P521-SHA512",
+        ossl_der_oid_id_mldsa87_ecdsa_p521_sha512,
+        DER_OID_SZ_id_mldsa87_ecdsa_p521_sha512,
+        "SHA-512", 64, "SHA-512", COMPOSITE_CLASSIC_ECDSA, 0, NULL },
 };
 #define COMPOSITE_NUM_ALGS \
     (sizeof(composite_alg_table) / sizeof(composite_alg_table[0]))
@@ -199,17 +199,17 @@ static const COMPOSITE_ALG_INFO *composite_find_alg_info(const char *name)
  * SHAKE256 XOF used by ML-DSA-87-Ed448-SHAKE256.
  */
 static int composite_compute_prehash(OSSL_LIB_CTX *libctx,
-                                     const COMPOSITE_ALG_INFO *info,
-                                     const uint8_t *msg, size_t msg_len,
-                                     uint8_t *out)
+    const COMPOSITE_ALG_INFO *info,
+    const uint8_t *msg, size_t msg_len,
+    uint8_t *out)
 {
     if (OPENSSL_strcasecmp(info->prehash_alg, "SHAKE256") == 0) {
         EVP_MD_CTX *mctx = EVP_MD_CTX_new();
         EVP_MD *md = EVP_MD_fetch(libctx, "SHAKE256", NULL);
         int ok = (mctx != NULL && md != NULL
-                  && EVP_DigestInit_ex(mctx, md, NULL)
-                  && EVP_DigestUpdate(mctx, msg, msg_len)
-                  && EVP_DigestFinalXOF(mctx, out, info->prehash_len));
+            && EVP_DigestInit_ex(mctx, md, NULL)
+            && EVP_DigestUpdate(mctx, msg, msg_len)
+            && EVP_DigestFinalXOF(mctx, out, info->prehash_len));
         EVP_MD_CTX_free(mctx);
         EVP_MD_free(md);
         return ok;
@@ -221,9 +221,9 @@ static int composite_compute_prehash(OSSL_LIB_CTX *libctx,
  * Sign tbs/tbs_len with the traditional (non-ML-DSA) component key.
  */
 static int composite_classic_sign(PROV_COMPOSITE_CTX *ctx,
-                                   const COMPOSITE_ALG_INFO *info,
-                                   const uint8_t *tbs, size_t tbs_len,
-                                   uint8_t *sig, size_t *siglen)
+    const COMPOSITE_ALG_INFO *info,
+    const uint8_t *tbs, size_t tbs_len,
+    uint8_t *sig, size_t *siglen)
 {
     EVP_MD_CTX *md_ctx = EVP_MD_CTX_new();
     EVP_PKEY_CTX *pctx = NULL;
@@ -237,26 +237,27 @@ static int composite_classic_sign(PROV_COMPOSITE_CTX *ctx,
     case COMPOSITE_CLASSIC_ED448:
         /* Pure EdDSA: no external digest */
         if (!EVP_DigestSignInit_ex(md_ctx, NULL, NULL,
-                                   ctx->libctx, NULL,
-                                   ctx->key->classic_key, NULL))
+                ctx->libctx, NULL,
+                ctx->key->classic_key, NULL))
             goto err;
         break;
 
     case COMPOSITE_CLASSIC_ECDSA:
         if (!EVP_DigestSignInit_ex(md_ctx, NULL, info->classic_hash,
-                                   ctx->libctx, NULL,
-                                   ctx->key->classic_key, NULL))
+                ctx->libctx, NULL,
+                ctx->key->classic_key, NULL))
             goto err;
         break;
 
     case COMPOSITE_CLASSIC_RSA_PSS:
         if (!EVP_DigestSignInit_ex(md_ctx, &pctx, info->classic_hash,
-                                   ctx->libctx, NULL,
-                                   ctx->key->classic_key, NULL))
+                ctx->libctx, NULL,
+                ctx->key->classic_key, NULL))
             goto err;
         {
             const char *mgf1 = (info->mgf1_hash != NULL)
-                                ? info->mgf1_hash : info->classic_hash;
+                ? info->mgf1_hash
+                : info->classic_hash;
             if (EVP_PKEY_CTX_set_rsa_padding(pctx, RSA_PKCS1_PSS_PADDING) <= 0
                 || EVP_PKEY_CTX_set_rsa_pss_saltlen(pctx, info->pss_salt_len) <= 0
                 || EVP_PKEY_CTX_set_rsa_mgf1_md_name(pctx, mgf1, NULL) <= 0)
@@ -266,8 +267,8 @@ static int composite_classic_sign(PROV_COMPOSITE_CTX *ctx,
 
     case COMPOSITE_CLASSIC_RSA_PKCS15:
         if (!EVP_DigestSignInit_ex(md_ctx, &pctx, info->classic_hash,
-                                   ctx->libctx, NULL,
-                                   ctx->key->classic_key, NULL))
+                ctx->libctx, NULL,
+                ctx->key->classic_key, NULL))
             goto err;
         if (EVP_PKEY_CTX_set_rsa_padding(pctx, RSA_PKCS1_PADDING) <= 0)
             goto err;
@@ -288,7 +289,7 @@ err:
 }
 
 static int composite_sign(void *vctx, uint8_t *sig, size_t *siglen, size_t sigsize,
-                          const uint8_t *msg, size_t msg_len)
+    const uint8_t *msg, size_t msg_len)
 {
     PROV_COMPOSITE_CTX *ctx = (PROV_COMPOSITE_CTX *)vctx;
     const COMPOSITE_ALG_INFO *info;
@@ -317,7 +318,7 @@ static int composite_sign(void *vctx, uint8_t *sig, size_t *siglen, size_t sigsi
     /* Size query */
     if (sig == NULL) {
         *siglen = ml_dsa_sig_max
-                  + (size_t)EVP_PKEY_get_size(ctx->key->classic_key);
+            + (size_t)EVP_PKEY_get_size(ctx->key->classic_key);
         return 1;
     }
 
@@ -353,16 +354,16 @@ static int composite_sign(void *vctx, uint8_t *sig, size_t *siglen, size_t sigsi
 
     ml_dsa_siglen = ml_dsa_sig_max;
     if (!ossl_ml_dsa_sign(ctx->key->ml_dsa_key, 0,
-                          tbs, tbs_len,
-                          (const unsigned char *)info->label, strlen(info->label),
-                          rnd, sizeof(rnd), 1,
-                          sig, &ml_dsa_siglen, sigsize))
+            tbs, tbs_len,
+            (const unsigned char *)info->label, strlen(info->label),
+            rnd, sizeof(rnd), 1,
+            sig, &ml_dsa_siglen, sigsize))
         goto err;
 
     /* Traditional component: sign M' with the classic key */
     classic_siglen = sigsize - ml_dsa_siglen;
     if (!composite_classic_sign(ctx, info, tbs, tbs_len,
-                                sig + ml_dsa_siglen, &classic_siglen))
+            sig + ml_dsa_siglen, &classic_siglen))
         goto err;
 
     /* Wire format: mldsaSig || tradSig (flat concatenation) */
@@ -439,7 +440,7 @@ static int composite_verify_init(void *vctx, void *vkey, const OSSL_PARAM params
 }
 
 static int composite_verify(void *vctx, const uint8_t *sig, size_t siglen,
-                            const uint8_t *msg, size_t msg_len)
+    const uint8_t *msg, size_t msg_len)
 {
     PROV_COMPOSITE_CTX *ctx = (PROV_COMPOSITE_CTX *)vctx;
     const COMPOSITE_ALG_INFO *info;
@@ -494,9 +495,9 @@ static int composite_verify(void *vctx, const uint8_t *sig, size_t siglen,
 
     /* Verify ML-DSA component, with Label as mldsa_ctx per §3.2 */
     if (!ossl_ml_dsa_verify(ctx->key->ml_dsa_key, 0,
-                            tbs, tbs_len,
-                            (const unsigned char *)info->label, strlen(info->label),
-                            1, sig, ml_dsa_sig_len))
+            tbs, tbs_len,
+            (const unsigned char *)info->label, strlen(info->label),
+            1, sig, ml_dsa_sig_len))
         goto err;
 
     /* Verify classic component */
@@ -508,26 +509,27 @@ static int composite_verify(void *vctx, const uint8_t *sig, size_t siglen,
     case COMPOSITE_CLASSIC_ED25519:
     case COMPOSITE_CLASSIC_ED448:
         if (!EVP_DigestVerifyInit_ex(md_ctx, NULL, NULL,
-                                    ctx->libctx, NULL,
-                                    ctx->key->classic_key, NULL))
+                ctx->libctx, NULL,
+                ctx->key->classic_key, NULL))
             goto err;
         break;
 
     case COMPOSITE_CLASSIC_ECDSA:
         if (!EVP_DigestVerifyInit_ex(md_ctx, NULL, info->classic_hash,
-                                    ctx->libctx, NULL,
-                                    ctx->key->classic_key, NULL))
+                ctx->libctx, NULL,
+                ctx->key->classic_key, NULL))
             goto err;
         break;
 
     case COMPOSITE_CLASSIC_RSA_PSS:
         if (!EVP_DigestVerifyInit_ex(md_ctx, &pctx, info->classic_hash,
-                                    ctx->libctx, NULL,
-                                    ctx->key->classic_key, NULL))
+                ctx->libctx, NULL,
+                ctx->key->classic_key, NULL))
             goto err;
         {
             const char *mgf1 = (info->mgf1_hash != NULL)
-                               ? info->mgf1_hash : info->classic_hash;
+                ? info->mgf1_hash
+                : info->classic_hash;
             if (EVP_PKEY_CTX_set_rsa_padding(pctx, RSA_PKCS1_PSS_PADDING) <= 0
                 || EVP_PKEY_CTX_set_rsa_pss_saltlen(pctx, info->pss_salt_len) <= 0
                 || EVP_PKEY_CTX_set_rsa_mgf1_md_name(pctx, mgf1, NULL) <= 0)
@@ -537,8 +539,8 @@ static int composite_verify(void *vctx, const uint8_t *sig, size_t siglen,
 
     case COMPOSITE_CLASSIC_RSA_PKCS15:
         if (!EVP_DigestVerifyInit_ex(md_ctx, &pctx, info->classic_hash,
-                                    ctx->libctx, NULL,
-                                    ctx->key->classic_key, NULL))
+                ctx->libctx, NULL,
+                ctx->key->classic_key, NULL))
             goto err;
         if (EVP_PKEY_CTX_set_rsa_padding(pctx, RSA_PKCS1_PADDING) <= 0)
             goto err;
@@ -550,9 +552,10 @@ static int composite_verify(void *vctx, const uint8_t *sig, size_t siglen,
     }
 
     if (EVP_DigestVerify(md_ctx,
-                         sig + ml_dsa_sig_len,
-                         siglen - ml_dsa_sig_len,
-                         tbs, tbs_len) != 1)
+            sig + ml_dsa_sig_len,
+            siglen - ml_dsa_sig_len,
+            tbs, tbs_len)
+        != 1)
         goto err;
 
     ret = 1;
@@ -579,7 +582,7 @@ static int composite_get_ctx_params(void *vctx, OSSL_PARAM params[])
         size_t aid_len;
 
         if (ctx->oid == NULL || ctx->oid_sz == 0
-                || ctx->oid_sz > sizeof(aid) - 2)
+            || ctx->oid_sz > sizeof(aid) - 2)
             return 0;
 
         aid[0] = 0x30; /* SEQUENCE tag */
@@ -626,28 +629,28 @@ static const OSSL_PARAM *composite_settable_ctx_params(void *vctx, void *provctx
 }
 
 static int composite_sign_msg_init(void *vctx, void *vkey,
-                                   const OSSL_PARAM params[])
+    const OSSL_PARAM params[])
 {
     return composite_sign_init(vctx, vkey, params);
 }
 
 static int composite_signverify_msg_update(void *vctx,
-                                           const unsigned char *data,
-                                           size_t datalen)
+    const unsigned char *data,
+    size_t datalen)
 {
     ERR_raise(ERR_LIB_PROV, ERR_R_UNSUPPORTED);
     return 0;
 }
 
 static int composite_sign_msg_final(void *vctx, unsigned char *sig,
-                                    size_t *siglen, size_t sigsize)
+    size_t *siglen, size_t sigsize)
 {
     ERR_raise(ERR_LIB_PROV, ERR_R_UNSUPPORTED);
     return 0;
 }
 
 static int composite_verify_msg_init(void *vctx, void *vkey,
-                                     const OSSL_PARAM params[])
+    const OSSL_PARAM params[])
 {
     return composite_verify_init(vctx, vkey, params);
 }
@@ -659,28 +662,28 @@ static int composite_verify_msg_final(void *vctx)
 }
 
 static int composite_digest_signverify_init(void *vctx, const char *mdname,
-                                            void *vkey,
-                                            const OSSL_PARAM params[])
+    void *vkey,
+    const OSSL_PARAM params[])
 {
     if (mdname != NULL && mdname[0] != '\0') {
         ERR_raise_data(ERR_LIB_PROV, PROV_R_INVALID_DIGEST,
-                       "Explicit digest not supported for composite "
-                       "signature operations");
+            "Explicit digest not supported for composite "
+            "signature operations");
         return 0;
     }
     return composite_sign_init(vctx, vkey, params);
 }
 
 static int composite_digest_sign(void *vctx, uint8_t *sig, size_t *siglen,
-                                  size_t sigsize, const uint8_t *tbs,
-                                  size_t tbslen)
+    size_t sigsize, const uint8_t *tbs,
+    size_t tbslen)
 {
     return composite_sign(vctx, sig, siglen, sigsize, tbs, tbslen);
 }
 
 static int composite_digest_verify(void *vctx, const uint8_t *sig,
-                                    size_t siglen, const uint8_t *tbs,
-                                    size_t tbslen)
+    size_t siglen, const uint8_t *tbs,
+    size_t tbslen)
 {
     return composite_verify(vctx, sig, siglen, tbs, tbslen);
 }
@@ -689,93 +692,93 @@ static int composite_digest_verify(void *vctx, const uint8_t *sig,
  * Per-algorithm newctx functions and dispatch tables.
  * The alg string is stored in the context for domain separator selection.
  */
-#define MAKE_COMPOSITE_FUNCTIONS(name, namestr)                                \
-    static void *composite_##name##_newctx(void *provctx, const char *propq)   \
-    {                                                                          \
-        PROV_COMPOSITE_CTX *ctx = composite_newctx(provctx, 0, propq);        \
-        if (ctx != NULL)                                                       \
-            ctx->alg = namestr;                                                \
-        return ctx;                                                            \
-    }                                                                          \
-    const OSSL_DISPATCH ossl_##name##_signature_functions[] = {               \
-        { OSSL_FUNC_SIGNATURE_NEWCTX,                                          \
-            (void (*)(void))composite_##name##_newctx },                       \
-        { OSSL_FUNC_SIGNATURE_FREECTX,                                         \
-            (void (*)(void))composite_freectx },                               \
-        { OSSL_FUNC_SIGNATURE_DUPCTX,                                          \
-            (void (*)(void))composite_dupctx },                                \
-        { OSSL_FUNC_SIGNATURE_SIGN_INIT,                                       \
-            (void (*)(void))composite_sign_init },                             \
-        { OSSL_FUNC_SIGNATURE_SIGN_MESSAGE_INIT,                               \
-            (void (*)(void))composite_sign_msg_init },                         \
-        { OSSL_FUNC_SIGNATURE_SIGN_MESSAGE_UPDATE,                             \
-            (void (*)(void))composite_signverify_msg_update },                 \
-        { OSSL_FUNC_SIGNATURE_SIGN_MESSAGE_FINAL,                              \
-            (void (*)(void))composite_sign_msg_final },                        \
-        { OSSL_FUNC_SIGNATURE_SIGN,                                            \
-            (void (*)(void))composite_sign },                                  \
-        { OSSL_FUNC_SIGNATURE_VERIFY_INIT,                                     \
-            (void (*)(void))composite_verify_init },                           \
-        { OSSL_FUNC_SIGNATURE_VERIFY_MESSAGE_INIT,                             \
-            (void (*)(void))composite_verify_msg_init },                       \
-        { OSSL_FUNC_SIGNATURE_VERIFY_MESSAGE_UPDATE,                           \
-            (void (*)(void))composite_signverify_msg_update },                 \
-        { OSSL_FUNC_SIGNATURE_VERIFY_MESSAGE_FINAL,                            \
-            (void (*)(void))composite_verify_msg_final },                      \
-        { OSSL_FUNC_SIGNATURE_VERIFY,                                          \
-            (void (*)(void))composite_verify },                                \
-        { OSSL_FUNC_SIGNATURE_DIGEST_SIGN_INIT,                                \
-            (void (*)(void))composite_digest_signverify_init },                \
-        { OSSL_FUNC_SIGNATURE_DIGEST_SIGN,                                     \
-            (void (*)(void))composite_digest_sign },                           \
-        { OSSL_FUNC_SIGNATURE_DIGEST_VERIFY_INIT,                              \
-            (void (*)(void))composite_digest_signverify_init },                \
-        { OSSL_FUNC_SIGNATURE_DIGEST_VERIFY,                                   \
-            (void (*)(void))composite_digest_verify },                         \
-        { OSSL_FUNC_SIGNATURE_GET_CTX_PARAMS,                                  \
-            (void (*)(void))composite_get_ctx_params },                        \
-        { OSSL_FUNC_SIGNATURE_GETTABLE_CTX_PARAMS,                             \
-            (void (*)(void))composite_gettable_ctx_params },                   \
-        { OSSL_FUNC_SIGNATURE_SET_CTX_PARAMS,                                  \
-            (void (*)(void))composite_set_ctx_params },                        \
-        { OSSL_FUNC_SIGNATURE_SETTABLE_CTX_PARAMS,                             \
-            (void (*)(void))composite_settable_ctx_params },                   \
-        OSSL_DISPATCH_END                                                      \
+#define MAKE_COMPOSITE_FUNCTIONS(name, namestr)                              \
+    static void *composite_##name##_newctx(void *provctx, const char *propq) \
+    {                                                                        \
+        PROV_COMPOSITE_CTX *ctx = composite_newctx(provctx, 0, propq);       \
+        if (ctx != NULL)                                                     \
+            ctx->alg = namestr;                                              \
+        return ctx;                                                          \
+    }                                                                        \
+    const OSSL_DISPATCH ossl_##name##_signature_functions[] = {              \
+        { OSSL_FUNC_SIGNATURE_NEWCTX,                                        \
+            (void (*)(void))composite_##name##_newctx },                     \
+        { OSSL_FUNC_SIGNATURE_FREECTX,                                       \
+            (void (*)(void))composite_freectx },                             \
+        { OSSL_FUNC_SIGNATURE_DUPCTX,                                        \
+            (void (*)(void))composite_dupctx },                              \
+        { OSSL_FUNC_SIGNATURE_SIGN_INIT,                                     \
+            (void (*)(void))composite_sign_init },                           \
+        { OSSL_FUNC_SIGNATURE_SIGN_MESSAGE_INIT,                             \
+            (void (*)(void))composite_sign_msg_init },                       \
+        { OSSL_FUNC_SIGNATURE_SIGN_MESSAGE_UPDATE,                           \
+            (void (*)(void))composite_signverify_msg_update },               \
+        { OSSL_FUNC_SIGNATURE_SIGN_MESSAGE_FINAL,                            \
+            (void (*)(void))composite_sign_msg_final },                      \
+        { OSSL_FUNC_SIGNATURE_SIGN,                                          \
+            (void (*)(void))composite_sign },                                \
+        { OSSL_FUNC_SIGNATURE_VERIFY_INIT,                                   \
+            (void (*)(void))composite_verify_init },                         \
+        { OSSL_FUNC_SIGNATURE_VERIFY_MESSAGE_INIT,                           \
+            (void (*)(void))composite_verify_msg_init },                     \
+        { OSSL_FUNC_SIGNATURE_VERIFY_MESSAGE_UPDATE,                         \
+            (void (*)(void))composite_signverify_msg_update },               \
+        { OSSL_FUNC_SIGNATURE_VERIFY_MESSAGE_FINAL,                          \
+            (void (*)(void))composite_verify_msg_final },                    \
+        { OSSL_FUNC_SIGNATURE_VERIFY,                                        \
+            (void (*)(void))composite_verify },                              \
+        { OSSL_FUNC_SIGNATURE_DIGEST_SIGN_INIT,                              \
+            (void (*)(void))composite_digest_signverify_init },              \
+        { OSSL_FUNC_SIGNATURE_DIGEST_SIGN,                                   \
+            (void (*)(void))composite_digest_sign },                         \
+        { OSSL_FUNC_SIGNATURE_DIGEST_VERIFY_INIT,                            \
+            (void (*)(void))composite_digest_signverify_init },              \
+        { OSSL_FUNC_SIGNATURE_DIGEST_VERIFY,                                 \
+            (void (*)(void))composite_digest_verify },                       \
+        { OSSL_FUNC_SIGNATURE_GET_CTX_PARAMS,                                \
+            (void (*)(void))composite_get_ctx_params },                      \
+        { OSSL_FUNC_SIGNATURE_GETTABLE_CTX_PARAMS,                           \
+            (void (*)(void))composite_gettable_ctx_params },                 \
+        { OSSL_FUNC_SIGNATURE_SET_CTX_PARAMS,                                \
+            (void (*)(void))composite_set_ctx_params },                      \
+        { OSSL_FUNC_SIGNATURE_SETTABLE_CTX_PARAMS,                           \
+            (void (*)(void))composite_settable_ctx_params },                 \
+        OSSL_DISPATCH_END                                                    \
     }
 
 MAKE_COMPOSITE_FUNCTIONS(mldsa44_rsa2048_pss_sha256,
-                         "ML-DSA-44-RSA2048-PSS-SHA256");
+    "ML-DSA-44-RSA2048-PSS-SHA256");
 MAKE_COMPOSITE_FUNCTIONS(mldsa44_rsa2048_pkcs15_sha256,
-                         "ML-DSA-44-RSA2048-PKCS15-SHA256");
+    "ML-DSA-44-RSA2048-PKCS15-SHA256");
 MAKE_COMPOSITE_FUNCTIONS(mldsa44_ed25519_sha512,
-                         "ML-DSA-44-Ed25519-SHA512");
+    "ML-DSA-44-Ed25519-SHA512");
 MAKE_COMPOSITE_FUNCTIONS(mldsa44_ecdsa_p256_sha256,
-                         "ML-DSA-44-ECDSA-P256-SHA256");
+    "ML-DSA-44-ECDSA-P256-SHA256");
 MAKE_COMPOSITE_FUNCTIONS(mldsa65_rsa3072_pss_sha512,
-                         "ML-DSA-65-RSA3072-PSS-SHA512");
+    "ML-DSA-65-RSA3072-PSS-SHA512");
 MAKE_COMPOSITE_FUNCTIONS(mldsa65_rsa3072_pkcs15_sha512,
-                         "ML-DSA-65-RSA3072-PKCS15-SHA512");
+    "ML-DSA-65-RSA3072-PKCS15-SHA512");
 MAKE_COMPOSITE_FUNCTIONS(mldsa65_rsa4096_pss_sha512,
-                         "ML-DSA-65-RSA4096-PSS-SHA512");
+    "ML-DSA-65-RSA4096-PSS-SHA512");
 MAKE_COMPOSITE_FUNCTIONS(mldsa65_rsa4096_pkcs15_sha512,
-                         "ML-DSA-65-RSA4096-PKCS15-SHA512");
+    "ML-DSA-65-RSA4096-PKCS15-SHA512");
 MAKE_COMPOSITE_FUNCTIONS(mldsa65_ecdsa_p256_sha512,
-                         "ML-DSA-65-ECDSA-P256-SHA512");
+    "ML-DSA-65-ECDSA-P256-SHA512");
 MAKE_COMPOSITE_FUNCTIONS(mldsa65_ecdsa_p384_sha512,
-                         "ML-DSA-65-ECDSA-P384-SHA512");
+    "ML-DSA-65-ECDSA-P384-SHA512");
 MAKE_COMPOSITE_FUNCTIONS(mldsa65_ecdsa_brainpoolP256r1_sha512,
-                         "ML-DSA-65-ECDSA-brainpoolP256r1-SHA512");
+    "ML-DSA-65-ECDSA-brainpoolP256r1-SHA512");
 MAKE_COMPOSITE_FUNCTIONS(mldsa65_ed25519_sha512,
-                         "ML-DSA-65-Ed25519-SHA512");
+    "ML-DSA-65-Ed25519-SHA512");
 MAKE_COMPOSITE_FUNCTIONS(mldsa87_ecdsa_p384_sha512,
-                         "ML-DSA-87-ECDSA-P384-SHA512");
+    "ML-DSA-87-ECDSA-P384-SHA512");
 MAKE_COMPOSITE_FUNCTIONS(mldsa87_ecdsa_brainpoolP384r1_sha512,
-                         "ML-DSA-87-ECDSA-brainpoolP384r1-SHA512");
+    "ML-DSA-87-ECDSA-brainpoolP384r1-SHA512");
 MAKE_COMPOSITE_FUNCTIONS(mldsa87_ed448_shake256,
-                         "ML-DSA-87-Ed448-SHAKE256");
+    "ML-DSA-87-Ed448-SHAKE256");
 MAKE_COMPOSITE_FUNCTIONS(mldsa87_rsa3072_pss_sha512,
-                         "ML-DSA-87-RSA3072-PSS-SHA512");
+    "ML-DSA-87-RSA3072-PSS-SHA512");
 MAKE_COMPOSITE_FUNCTIONS(mldsa87_rsa4096_pss_sha512,
-                         "ML-DSA-87-RSA4096-PSS-SHA512");
+    "ML-DSA-87-RSA4096-PSS-SHA512");
 MAKE_COMPOSITE_FUNCTIONS(mldsa87_ecdsa_p521_sha512,
-                         "ML-DSA-87-ECDSA-P521-SHA512");
+    "ML-DSA-87-ECDSA-P521-SHA512");

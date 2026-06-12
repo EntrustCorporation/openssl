@@ -11,7 +11,7 @@
  */
 
 #ifndef PROV_COMPOSITE_H
-# define PROV_COMPOSITE_H
+#define PROV_COMPOSITE_H
 
 #include "internal/der.h"
 #include "crypto/ml_dsa.h"
@@ -147,10 +147,9 @@ extern const unsigned char ossl_der_oid_id_mldsa87_rsa4096_pss_sha512[DER_OID_SZ
 #define DER_OID_SZ_id_mldsa87_ecdsa_p521_sha512 10
 extern const unsigned char ossl_der_oid_id_mldsa87_ecdsa_p521_sha512[DER_OID_SZ_id_mldsa87_ecdsa_p521_sha512];
 
-
 typedef struct {
-  ML_DSA_KEY *ml_dsa_key;
-  EVP_PKEY *classic_key;
+    ML_DSA_KEY *ml_dsa_key;
+    EVP_PKEY *classic_key;
 } COMPOSITE_KEY;
 
 typedef struct {
@@ -170,7 +169,7 @@ typedef struct {
 } PROV_COMPOSITE_CTX;
 
 COMPOSITE_KEY *ossl_prov_composite_new(PROV_CTX *ctx, const char *propq,
-                                       int ml_dsa_evp_type);
+    int ml_dsa_evp_type);
 void ossl_composite_key_free(COMPOSITE_KEY *key);
 
 #endif /* PROV_COMPOSITE_H */
