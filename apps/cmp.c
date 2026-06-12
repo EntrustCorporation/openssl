@@ -87,6 +87,7 @@ static char *opt_srvcert = NULL;
 static char *opt_expect_sender = NULL;
 static int opt_ignore_keyusage = 0;
 static int opt_unprotected_errors = 0;
+static int opt_nonmatched_error_nonces = 0;
 static int opt_ta_in_ip_extracerts = 0;
 static int opt_no_cache_extracerts = 0;
 static char *opt_srvcertout = NULL;
@@ -282,6 +283,7 @@ typedef enum OPTION_choice {
     OPT_EXPECT_SENDER,
     OPT_IGNORE_KEYUSAGE,
     OPT_UNPROTECTED_ERRORS,
+    OPT_NONMATCHED_ERROR_NONCES,
     OPT_TA_IN_IP_EXTRACERTS,
     OPT_NO_CACHE_EXTRACERTS,
     OPT_SRVCERTOUT,
@@ -472,13 +474,13 @@ const OPTIONS cmp_options[] = {
         "NOTE: -server, -proxy, and -no_proxy not supported due to no-sock/no-http build" },
 #else
     { "server", OPT_SERVER, 's',
-        "[http[s]://]address[:port][/path] of CMP server. Default port 80 or 443." },
+        "[http[s]://]host[:port][/path] of CMP server to use. Default port 80 or 443." },
     { OPT_MORE_STR, 0, 0,
-        "address may be a DNS name or an IP address; path can be overridden by -path" },
+        "host may be a DNS name or an IP address; path can be overridden by -path" },
     { "proxy", OPT_PROXY, 's',
-        "[http[s]://]address[:port][/path] of HTTP(S) proxy to use; path is ignored" },
+        "[http[s]://]host[:port][/path] of HTTP(S) proxy to use; path is ignored" },
     { "no_proxy", OPT_NO_PROXY, 's',
-        "List of addresses of servers not to use HTTP(S) proxy for" },
+        "List of servers not to use HTTP(S) proxy for" },
     { OPT_MORE_STR, 0, 0,
         "Default from environment variable 'no_proxy', else 'NO_PROXY', else none" },
 #endif
@@ -511,6 +513,8 @@ const OPTIONS cmp_options[] = {
         "certificate responses (ip/cp/kup), revocation responses (rp), and PKIConf" },
     { OPT_MORE_STR, 0, 0,
         "WARNING: This setting leads to behavior allowing violation of RFC 9810" },
+    { "nonmatched_error_nonces", OPT_NONMATCHED_ERROR_NONCES, '-',
+        "Accept missing or non-matching transactionID or recipNonce in error messages" },
     { "ta_in_ip_extracerts", OPT_TA_IN_IP_EXTRACERTS, '-',
         "Permit using self-issued certificates from the extraCerts in an IP message" },
     { OPT_MORE_STR, 0, 0,
@@ -597,7 +601,7 @@ const OPTIONS cmp_options[] = {
         "Trusted certificates to use for verifying the TLS server certificate;" },
     { OPT_MORE_STR, 0, 0, "this implies hostname validation" },
     { "tls_host", OPT_TLS_HOST, 's',
-        "Address to be checked (rather than -server) during TLS hostname validation" },
+        "Host name/address (rather than -server) to verify in TLS server cert" },
 #endif
 
     OPT_SECTION("Client-side debugging"),
@@ -735,6 +739,7 @@ static varref cmp_vars[] = { /* must be in same order as enumerated above! */
     { &opt_trusted }, { &opt_untrusted }, { &opt_srvcert },
     { &opt_expect_sender },
     { (char **)&opt_ignore_keyusage }, { (char **)&opt_unprotected_errors },
+    { (char **)&opt_nonmatched_error_nonces },
     { (char **)&opt_ta_in_ip_extracerts },
     { (char **)&opt_no_cache_extracerts },
     { &opt_srvcertout }, { &opt_extracertsout }, { &opt_cacertsout },
@@ -861,7 +866,11 @@ static X509 *load_cert_pwd(const char *uri, const char *source, const char *desc
     return cert;
 }
 
-/* set expected hostname/IP addr and clears the email addr in the given ts */
+/*
+ * Set expected hostname/IP address and clears any email address in the given ts.
+ * If the host is NULL, host name/address verification is disabled.
+ * It is interpreted as an IP address when possible, otherwise as a domain name.
+ */
 static int truststore_set_host_etc(X509_STORE *ts, const char *host)
 {
     X509_VERIFY_PARAM *ts_vpm = X509_STORE_get0_param(ts);
@@ -871,10 +880,14 @@ static int truststore_set_host_etc(X509_STORE *ts, const char *host)
         || !X509_VERIFY_PARAM_set1_ip(ts_vpm, NULL, 0)
         || !X509_VERIFY_PARAM_set1_email(ts_vpm, NULL, 0))
         return 0;
+    if (host == NULL)
+        return 1;
+
     X509_VERIFY_PARAM_set_hostflags(ts_vpm,
         X509_CHECK_FLAG_ALWAYS_CHECK_SUBJECT | X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
-    return (host != NULL && X509_VERIFY_PARAM_set1_ip_asc(ts_vpm, host))
-        || X509_VERIFY_PARAM_set1_host(ts_vpm, host, 0);
+    return host_is_ip_address(host)
+        ? X509_VERIFY_PARAM_set1_ip_asc(ts_vpm, host)
+        : X509_VERIFY_PARAM_set1_host(ts_vpm, host, 0);
 }
 
 /* write OSSL_CMP_MSG DER-encoded to the specified file name item */
@@ -1409,6 +1422,8 @@ static int setup_verification_ctx(OSSL_CMP_CTX *ctx)
 
     if (opt_unprotected_errors)
         (void)OSSL_CMP_CTX_set_option(ctx, OSSL_CMP_OPT_UNPROTECTED_ERRORS, 1);
+    if (opt_nonmatched_error_nonces)
+        (void)OSSL_CMP_CTX_set_option(ctx, OSSL_CMP_OPT_NONMATCHED_ERROR_NONCES, 1);
     if (opt_ta_in_ip_extracerts) {
         (void)OSSL_CMP_CTX_set_option(ctx, OSSL_CMP_OPT_PERMIT_TA_IN_EXTRACERTS_FOR_IR, 1);
         CMP_warn("permitting non-authenticated trust anchors in IP extracerts according to 3GPP TS 33.310");
@@ -1583,8 +1598,7 @@ static SSL_CTX *setup_ssl_ctx(OSSL_CMP_CTX *ctx, const char *host)
          * If we did this before checking our own TLS cert
          * the expected hostname would mislead the check.
          */
-        if (!truststore_set_host_etc(trust_store,
-                opt_tls_host != NULL ? opt_tls_host : host))
+        if (!truststore_set_host_etc(trust_store, host))
             goto err;
     }
     return ssl_ctx;
@@ -2369,9 +2383,9 @@ set_path:
             goto err;
         APP_HTTP_TLS_INFO_free(OSSL_CMP_CTX_get_http_cb_arg(ctx));
         (void)OSSL_CMP_CTX_set_http_cb_arg(ctx, info);
-        info->ssl_ctx = setup_ssl_ctx(ctx, host);
+        info->ssl_ctx = setup_ssl_ctx(ctx, opt_tls_host != NULL ? opt_tls_host : host);
         info->server = host;
-        host = NULL; /* prevent deallocation */
+        host = NULL; /* ownership has been transferred to info structure */
         if ((info->port = OPENSSL_strdup(server_port)) == NULL)
             goto err;
         /* workaround for callback design flaw, see #17088: */
@@ -2981,6 +2995,9 @@ static int get_opts(int argc, char **argv)
             break;
         case OPT_UNPROTECTED_ERRORS:
             opt_unprotected_errors = 1;
+            break;
+        case OPT_NONMATCHED_ERROR_NONCES:
+            opt_nonmatched_error_nonces = 1;
             break;
         case OPT_TA_IN_IP_EXTRACERTS:
             opt_ta_in_ip_extracerts = 1;
@@ -3999,11 +4016,7 @@ err:
         /* cannot free info already here, as it may be used indirectly by: */
         OSSL_CMP_CTX_free(cmp_ctx);
 #if !defined(OPENSSL_NO_SOCK) && !defined(OPENSSL_NO_HTTP)
-        if (info != NULL) {
-            OPENSSL_free((char *)info->server);
-            OPENSSL_free((char *)info->port);
-            APP_HTTP_TLS_INFO_free(info);
-        }
+        APP_HTTP_TLS_INFO_free(info);
 #endif
     }
     X509_VERIFY_PARAM_free(vpm);

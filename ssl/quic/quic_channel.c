@@ -2310,6 +2310,12 @@ static void ch_rx_check_forged_pkt_limit(QUIC_CHANNEL *ch)
         "forgery limit");
 }
 
+void ossl_ch_reset_rx_state(QUIC_CHANNEL *ch)
+{
+    ch->did_crypto_frame = 0;
+    ch->seen_path_challenge = 0;
+}
+
 /* Process queued incoming packets and handle frames, if any. */
 static int ch_rx(QUIC_CHANNEL *ch, int channel_only, int *notify_other_threads)
 {
@@ -4354,4 +4360,14 @@ uint64_t ossl_quic_channel_get_active_conn_id_limit_request(const QUIC_CHANNEL *
 uint64_t ossl_quic_channel_get_active_conn_id_limit_peer_request(const QUIC_CHANNEL *ch)
 {
     return ch->rx_active_conn_id_limit;
+}
+
+uint64_t ossl_quic_channel_get_path_challenge_count(const QUIC_CHANNEL *ch)
+{
+    return ch->path_challenge_rx;
+}
+
+uint64_t ossl_quic_channel_get_path_response_count(const QUIC_CHANNEL *ch)
+{
+    return ch->path_response_tx;
 }
