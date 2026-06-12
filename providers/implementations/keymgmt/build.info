@@ -72,3 +72,4 @@ IF[{- !$disabled{'slh-dsa'} -}]
 ENDIF
 
 SOURCE[$COMPOSITE_GOAL]=composite_kmgmt.c
+DEPEND[composite_kmgmt.o]=../../common/include/prov/composite.h

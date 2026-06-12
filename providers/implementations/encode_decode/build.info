@@ -37,4 +37,8 @@ ENDIF
 
 IF[{- !$disabled{composite} -}]
   SOURCE[$DECODER_GOAL]=composite_codecs.c
+  DEPEND[composite_codecs.o]=../../common/include/prov/composite.h
+  DEPEND[decode_der2key.o]=../../common/include/prov/composite.h
+  DEPEND[encode_key2any.o]=../../common/include/prov/composite.h
+  DEPEND[encode_key2text.o]=../../common/include/prov/composite.h
 ENDIF
