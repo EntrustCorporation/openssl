@@ -132,7 +132,7 @@ static int composite_encode_classic_priv(const EVP_PKEY *pkey,
                 &include_pub),
             OSSL_PARAM_construct_end()
         };
-        EVP_PKEY *ec_copy = EVP_PKEY_dup(pkey);
+        EVP_PKEY *ec_copy = EVP_PKEY_dup((EVP_PKEY *)pkey);
 
         if (ec_copy == NULL)
             return 0;
