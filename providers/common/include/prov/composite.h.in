@@ -19,12 +19,13 @@
 #define COMPOSITE_PREFIX "436F6D706F73697465416C676F726974686D5369676E61747572657332303235"
 
 /* Well known OIDs precompiled */
-{
-    -$OUT = oids_to_c::process_leaves('providers/common/der/composite.asn1',
-        { dir = > $config { sourcedir },
-            filter = > \& oids_to_c::filter_to_H });
-    -
-}
+/* clang-format off */
+{-
+    $OUT = oids_to_c::process_leaves('providers/common/der/composite.asn1',
+                                     { dir => $config{sourcedir},
+                                       filter => \&oids_to_c::filter_to_H });
+-}
+/* clang-format on */
 
 typedef struct {
     ML_DSA_KEY *ml_dsa_key;
