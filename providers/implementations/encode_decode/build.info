@@ -35,7 +35,7 @@ IF[{- !$disabled{'ml-dsa'} || !$disabled{'ml-kem'} -}]
   SOURCE[$DECODER_GOAL]=ml_common_codecs.c
 ENDIF
 
-IF[{- !$disabled{composite} -}]
+IF[{- !$disabled{'ml-dsa'} -}]
   SOURCE[$DECODER_GOAL]=composite_codecs.c
   DEPEND[composite_codecs.o]=../../common/include/prov/composite.h
   DEPEND[decode_der2key.o]=../../common/include/prov/composite.h

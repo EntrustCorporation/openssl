@@ -35,7 +35,6 @@ DEPEND[dsa_sig.o]=../../common/include/prov/der_dsa.h
 DEPEND[ecdsa_sig.o]=../../common/include/prov/der_ec.h
 DEPEND[eddsa_sig.o]=../../common/include/prov/der_ecx.h
 DEPEND[sm2_sig.o]=../../common/include/prov/der_sm2.h
-DEPEND[composite.o]=../../common/include/prov/composite.h
 
 SOURCE[$MAC_GOAL]=mac_legacy_sig.c
 
@@ -51,4 +50,7 @@ IF[{- !$disabled{'slh-dsa'} -}]
   SOURCE[$DSA_GOAL]=slh_dsa_sig.c
 ENDIF
 
-SOURCE[$COMPOSITE_GOAL]=composite_sig.c
+IF[{- !$disabled{'ml-dsa'} -}]
+  SOURCE[$COMPOSITE_GOAL]=composite_sig.c
+  DEPEND[composite_sig.o]=../../common/include/prov/composite.h
+ENDIF
