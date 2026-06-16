@@ -31,7 +31,19 @@ OpenSSL Releases
 
 ### Changes between 4.0 and 4.1 [xx XXX xxxx]
 
- * Added Composite key generation and signing.
+ * Added 18 composite post-quantum signature algorithms combining ML-DSA with a
+   classical algorithm (RSA, ECDSA, or EdDSA), as defined in
+   [draft-ietf-lamps-pq-composite-sigs](https://datatracker.ietf.org/doc/draft-ietf-lamps-pq-composite-sigs):
+   id-MLDSA44-RSA2048-PSS-SHA256, id-MLDSA44-RSA2048-PKCS15-SHA256,
+   id-MLDSA44-Ed25519-SHA512, id-MLDSA44-ECDSA-P256-SHA256,
+   id-MLDSA65-RSA3072-PSS-SHA512, id-MLDSA65-RSA3072-PKCS15-SHA512,
+   id-MLDSA65-RSA4096-PSS-SHA512, id-MLDSA65-RSA4096-PKCS15-SHA512,
+   id-MLDSA65-ECDSA-P256-SHA512, id-MLDSA65-ECDSA-P384-SHA512,
+   id-MLDSA65-ECDSA-brainpoolP256r1-SHA512, id-MLDSA65-Ed25519-SHA512,
+   id-MLDSA87-ECDSA-P384-SHA512, id-MLDSA87-ECDSA-brainpoolP384r1-SHA512,
+   id-MLDSA87-Ed448-SHAKE256, id-MLDSA87-RSA3072-PSS-SHA512,
+   id-MLDSA87-RSA4096-PSS-SHA512, id-MLDSA87-ECDSA-P521-SHA512.
+   These algorithms are available in the default provider only.
 
    *Felipe Ventura*
 
