@@ -1,0 +1,55 @@
+/*
+ * {- join("\n * ", @autowarntext) -}
+ *
+ * Copyright 2026 The OpenSSL Project Authors. All Rights Reserved.
+ *
+ * Licensed under the Apache License 2.0 (the "License").  You may not use
+ * this file except in compliance with the License.  You can obtain a copy
+ * in the file LICENSE in the source distribution or at
+ * https://www.openssl.org/source/license.html
+ */
+
+#ifndef PROV_COMPOSITE_H
+#define PROV_COMPOSITE_H
+
+#include "internal/der.h"
+#include "crypto/ml_dsa.h"
+#include "prov/provider_ctx.h"
+
+#define COMPOSITE_PREFIX "436F6D706F73697465416C676F726974686D5369676E61747572657332303235"
+
+/* Well known OIDs precompiled */
+/* clang-format off */
+{-
+    $OUT = oids_to_c::process_leaves('providers/common/der/composite.asn1',
+                                     { dir => $config{sourcedir},
+                                       filter => \&oids_to_c::filter_to_H });
+-}
+/* clang-format on */
+
+typedef struct {
+    ML_DSA_KEY *ml_dsa_key;
+    EVP_PKEY *classic_key;
+} COMPOSITE_KEY;
+
+typedef struct {
+    OSSL_LIB_CTX *libctx;
+    const char *alg;
+    const unsigned char *oid;
+    size_t oid_sz;
+    uint8_t context_string[255]; /* ML_DSA_MAX_CONTEXT_STRING_LEN */
+    size_t context_string_len;
+    const char *prehash_alg;
+    size_t prehash_len;
+
+    /* CLASSIC */
+    EVP_PKEY_CTX *classic_ctx;
+
+    COMPOSITE_KEY *key;
+} PROV_COMPOSITE_CTX;
+
+COMPOSITE_KEY *ossl_prov_composite_new(PROV_CTX *ctx, const char *propq,
+    int ml_dsa_evp_type);
+void ossl_composite_key_free(COMPOSITE_KEY *key);
+
+#endif /* PROV_COMPOSITE_H */

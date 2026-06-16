@@ -20,7 +20,7 @@
 #include <crypto/asn1.h>
 
 /* Serialized OID's */
-static const unsigned char so[9582] = {
+static const unsigned char so[9726] = {
     0x2A,0x86,0x48,0x86,0xF7,0x0D,                 /* [    0] OBJ_rsadsi */
     0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,            /* [    6] OBJ_pkcs */
     0x2A,0x86,0x48,0x86,0xF7,0x0D,0x02,0x02,       /* [   13] OBJ_md2 */
@@ -1364,9 +1364,27 @@ static const unsigned char so[9582] = {
     0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,0x09,0x10,0x0D,  /* [ 9549] OBJ_id_smime_ori */
     0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,0x09,0x10,0x0D,0x03,  /* [ 9559] OBJ_id_smime_ori_kem */
     0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,0x09,0x10,0x03,0x11,  /* [ 9570] OBJ_id_alg_hss_lms_hashsig */
+    0x2B,0x06,0x01,0x05,0x05,0x07,0x06,0x25,       /* [ 9581] OBJ_ML_DSA_44_RSA2048_PSS_SHA256 */
+    0x2B,0x06,0x01,0x05,0x05,0x07,0x06,0x26,       /* [ 9589] OBJ_ML_DSA_44_RSA2048_PKCS15_SHA256 */
+    0x2B,0x06,0x01,0x05,0x05,0x07,0x06,0x27,       /* [ 9597] OBJ_ML_DSA_44_Ed25519_SHA512 */
+    0x2B,0x06,0x01,0x05,0x05,0x07,0x06,0x28,       /* [ 9605] OBJ_ML_DSA_44_ECDSA_P256_SHA256 */
+    0x2B,0x06,0x01,0x05,0x05,0x07,0x06,0x29,       /* [ 9613] OBJ_ML_DSA_65_RSA3072_PSS_SHA512 */
+    0x2B,0x06,0x01,0x05,0x05,0x07,0x06,0x2A,       /* [ 9621] OBJ_ML_DSA_65_RSA3072_PKCS15_SHA512 */
+    0x2B,0x06,0x01,0x05,0x05,0x07,0x06,0x2B,       /* [ 9629] OBJ_ML_DSA_65_RSA4096_PSS_SHA512 */
+    0x2B,0x06,0x01,0x05,0x05,0x07,0x06,0x2C,       /* [ 9637] OBJ_ML_DSA_65_RSA4096_PKCS15_SHA512 */
+    0x2B,0x06,0x01,0x05,0x05,0x07,0x06,0x2D,       /* [ 9645] OBJ_ML_DSA_65_ECDSA_P256_SHA512 */
+    0x2B,0x06,0x01,0x05,0x05,0x07,0x06,0x2E,       /* [ 9653] OBJ_ML_DSA_65_ECDSA_P384_SHA512 */
+    0x2B,0x06,0x01,0x05,0x05,0x07,0x06,0x2F,       /* [ 9661] OBJ_ML_DSA_65_ECDSA_brainpoolP256r1_SHA512 */
+    0x2B,0x06,0x01,0x05,0x05,0x07,0x06,0x30,       /* [ 9669] OBJ_ML_DSA_65_Ed25519_SHA512 */
+    0x2B,0x06,0x01,0x05,0x05,0x07,0x06,0x31,       /* [ 9677] OBJ_ML_DSA_87_ECDSA_P384_SHA512 */
+    0x2B,0x06,0x01,0x05,0x05,0x07,0x06,0x32,       /* [ 9685] OBJ_ML_DSA_87_ECDSA_brainpoolP384r1_SHA512 */
+    0x2B,0x06,0x01,0x05,0x05,0x07,0x06,0x33,       /* [ 9693] OBJ_ML_DSA_87_Ed448_SHAKE256 */
+    0x2B,0x06,0x01,0x05,0x05,0x07,0x06,0x34,       /* [ 9701] OBJ_ML_DSA_87_RSA3072_PSS_SHA512 */
+    0x2B,0x06,0x01,0x05,0x05,0x07,0x06,0x35,       /* [ 9709] OBJ_ML_DSA_87_RSA4096_PSS_SHA512 */
+    0x2B,0x06,0x01,0x05,0x05,0x07,0x06,0x36,       /* [ 9717] OBJ_ML_DSA_87_ECDSA_P521_SHA512 */
 };
 
-#define NUM_NID 1502
+#define NUM_NID 1520
 static const ASN1_OBJECT nid_objs[NUM_NID] = {
     {"UNDEF", "undefined", NID_undef},
     {"rsadsi", "RSA Data Security, Inc.", NID_rsadsi, 6, &so[0]},
@@ -2870,9 +2888,27 @@ static const ASN1_OBJECT nid_objs[NUM_NID] = {
     {"id-smime-ori", "id-smime-ori", NID_id_smime_ori, 10, &so[9549]},
     {"id-smime-ori-kem", "id-smime-ori-kem", NID_id_smime_ori_kem, 11, &so[9559]},
     {"id-alg-hss-lms-hashsig", "id-alg-hss-lms-hashsig", NID_id_alg_hss_lms_hashsig, 11, &so[9570]},
+    {"id-mldsa44-rsa2048-pss-sha256", "ML-DSA-44-RSA2048-PSS-SHA256", NID_ML_DSA_44_RSA2048_PSS_SHA256, 8, &so[9581]},
+    {"id-mldsa44-rsa2048-pkcs15-sha256", "ML-DSA-44-RSA2048-PKCS15-SHA256", NID_ML_DSA_44_RSA2048_PKCS15_SHA256, 8, &so[9589]},
+    {"id-mldsa44-ed25519-sha512", "ML-DSA-44-Ed25519-SHA512", NID_ML_DSA_44_Ed25519_SHA512, 8, &so[9597]},
+    {"id-mldsa44-ecdsa-p256-sha256", "ML-DSA-44-ECDSA-P256-SHA256", NID_ML_DSA_44_ECDSA_P256_SHA256, 8, &so[9605]},
+    {"id-mldsa65-rsa3072-pss-sha512", "ML-DSA-65-RSA3072-PSS-SHA512", NID_ML_DSA_65_RSA3072_PSS_SHA512, 8, &so[9613]},
+    {"id-mldsa65-rsa3072-pkcs15-sha512", "ML-DSA-65-RSA3072-PKCS15-SHA512", NID_ML_DSA_65_RSA3072_PKCS15_SHA512, 8, &so[9621]},
+    {"id-mldsa65-rsa4096-pss-sha512", "ML-DSA-65-RSA4096-PSS-SHA512", NID_ML_DSA_65_RSA4096_PSS_SHA512, 8, &so[9629]},
+    {"id-mldsa65-rsa4096-pkcs15-sha512", "ML-DSA-65-RSA4096-PKCS15-SHA512", NID_ML_DSA_65_RSA4096_PKCS15_SHA512, 8, &so[9637]},
+    {"id-mldsa65-ecdsa-p256-sha512", "ML-DSA-65-ECDSA-P256-SHA512", NID_ML_DSA_65_ECDSA_P256_SHA512, 8, &so[9645]},
+    {"id-mldsa65-ecdsa-p384-sha512", "ML-DSA-65-ECDSA-P384-SHA512", NID_ML_DSA_65_ECDSA_P384_SHA512, 8, &so[9653]},
+    {"id-mldsa65-ecdsa-brainpoolP256r1-sha512", "ML-DSA-65-ECDSA-brainpoolP256r1-SHA512", NID_ML_DSA_65_ECDSA_brainpoolP256r1_SHA512, 8, &so[9661]},
+    {"id-mldsa65-ed25519-sha512", "ML-DSA-65-Ed25519-SHA512", NID_ML_DSA_65_Ed25519_SHA512, 8, &so[9669]},
+    {"id-mldsa87-ecdsa-p384-sha512", "ML-DSA-87-ECDSA-P384-SHA512", NID_ML_DSA_87_ECDSA_P384_SHA512, 8, &so[9677]},
+    {"id-mldsa87-ecdsa-brainpoolp384r1-sha512", "ML-DSA-87-ECDSA-brainpoolP384r1-SHA512", NID_ML_DSA_87_ECDSA_brainpoolP384r1_SHA512, 8, &so[9685]},
+    {"id-mldsa87-ed448-shake256", "ML-DSA-87-Ed448-SHAKE256", NID_ML_DSA_87_Ed448_SHAKE256, 8, &so[9693]},
+    {"id-mldsa87-rsa3072-pss-sha512", "ML-DSA-87-RSA3072-PSS-SHA512", NID_ML_DSA_87_RSA3072_PSS_SHA512, 8, &so[9701]},
+    {"id-mldsa87-rsa4096-pss-sha512", "ML-DSA-87-RSA4096-PSS-SHA512", NID_ML_DSA_87_RSA4096_PSS_SHA512, 8, &so[9709]},
+    {"id-mldsa87-ecdsa-p521-sha512", "ML-DSA-87-ECDSA-P521-SHA512", NID_ML_DSA_87_ECDSA_P521_SHA512, 8, &so[9717]},
 };
 
-#define NUM_SN 1493
+#define NUM_SN 1511
 static const unsigned int sn_objs[NUM_SN] = {
      364,    /* "AD_DVCS" */
      419,    /* "AES-128-CBC" */
@@ -3615,6 +3651,24 @@ static const unsigned int sn_objs[NUM_SN] = {
     1457,    /* "id-ml-dsa-44" */
     1458,    /* "id-ml-dsa-65" */
     1459,    /* "id-ml-dsa-87" */
+    1505,    /* "id-mldsa44-ecdsa-p256-sha256" */
+    1504,    /* "id-mldsa44-ed25519-sha512" */
+    1503,    /* "id-mldsa44-rsa2048-pkcs15-sha256" */
+    1502,    /* "id-mldsa44-rsa2048-pss-sha256" */
+    1512,    /* "id-mldsa65-ecdsa-brainpoolP256r1-sha512" */
+    1510,    /* "id-mldsa65-ecdsa-p256-sha512" */
+    1511,    /* "id-mldsa65-ecdsa-p384-sha512" */
+    1513,    /* "id-mldsa65-ed25519-sha512" */
+    1507,    /* "id-mldsa65-rsa3072-pkcs15-sha512" */
+    1506,    /* "id-mldsa65-rsa3072-pss-sha512" */
+    1509,    /* "id-mldsa65-rsa4096-pkcs15-sha512" */
+    1508,    /* "id-mldsa65-rsa4096-pss-sha512" */
+    1515,    /* "id-mldsa87-ecdsa-brainpoolp384r1-sha512" */
+    1514,    /* "id-mldsa87-ecdsa-p384-sha512" */
+    1519,    /* "id-mldsa87-ecdsa-p521-sha512" */
+    1516,    /* "id-mldsa87-ed448-shake256" */
+    1517,    /* "id-mldsa87-rsa3072-pss-sha512" */
+    1518,    /* "id-mldsa87-rsa4096-pss-sha512" */
      280,    /* "id-mod-attribute-cert" */
      274,    /* "id-mod-cmc" */
      277,    /* "id-mod-cmp" */
@@ -4369,7 +4423,7 @@ static const unsigned int sn_objs[NUM_SN] = {
     1289,    /* "zstd" */
 };
 
-#define NUM_LN 1493
+#define NUM_LN 1511
 static const unsigned int ln_objs[NUM_LN] = {
      363,    /* "AD Time Stamping" */
      405,    /* "ANSI X9.62" */
@@ -4530,8 +4584,26 @@ static const unsigned int ln_objs[NUM_LN] = {
      142,    /* "Invalidity Date" */
      504,    /* "MIME MHS" */
     1457,    /* "ML-DSA-44" */
+    1505,    /* "ML-DSA-44-ECDSA-P256-SHA256" */
+    1504,    /* "ML-DSA-44-Ed25519-SHA512" */
+    1503,    /* "ML-DSA-44-RSA2048-PKCS15-SHA256" */
+    1502,    /* "ML-DSA-44-RSA2048-PSS-SHA256" */
     1458,    /* "ML-DSA-65" */
+    1510,    /* "ML-DSA-65-ECDSA-P256-SHA512" */
+    1511,    /* "ML-DSA-65-ECDSA-P384-SHA512" */
+    1512,    /* "ML-DSA-65-ECDSA-brainpoolP256r1-SHA512" */
+    1513,    /* "ML-DSA-65-Ed25519-SHA512" */
+    1507,    /* "ML-DSA-65-RSA3072-PKCS15-SHA512" */
+    1506,    /* "ML-DSA-65-RSA3072-PSS-SHA512" */
+    1509,    /* "ML-DSA-65-RSA4096-PKCS15-SHA512" */
+    1508,    /* "ML-DSA-65-RSA4096-PSS-SHA512" */
     1459,    /* "ML-DSA-87" */
+    1514,    /* "ML-DSA-87-ECDSA-P384-SHA512" */
+    1519,    /* "ML-DSA-87-ECDSA-P521-SHA512" */
+    1515,    /* "ML-DSA-87-ECDSA-brainpoolP384r1-SHA512" */
+    1516,    /* "ML-DSA-87-Ed448-SHAKE256" */
+    1517,    /* "ML-DSA-87-RSA3072-PSS-SHA512" */
+    1518,    /* "ML-DSA-87-RSA4096-PSS-SHA512" */
     1456,    /* "ML-KEM-1024" */
     1454,    /* "ML-KEM-512" */
     1455,    /* "ML-KEM-768" */
@@ -5866,7 +5938,7 @@ static const unsigned int ln_objs[NUM_LN] = {
      125,    /* "zlib compression" */
 };
 
-#define NUM_OBJ 1350
+#define NUM_OBJ 1368
 static const unsigned int obj_objs[NUM_OBJ] = {
        0,    /* OBJ_undef                        0 */
      181,    /* OBJ_iso                          1 */
@@ -6695,6 +6767,24 @@ static const unsigned int obj_objs[NUM_OBJ] = {
      324,    /* OBJ_id_alg_noSignature           1 3 6 1 5 5 7 6 2 */
      325,    /* OBJ_id_alg_dh_sig_hmac_sha1      1 3 6 1 5 5 7 6 3 */
      326,    /* OBJ_id_alg_dh_pop                1 3 6 1 5 5 7 6 4 */
+    1502,    /* OBJ_ML_DSA_44_RSA2048_PSS_SHA256 1 3 6 1 5 5 7 6 37 */
+    1503,    /* OBJ_ML_DSA_44_RSA2048_PKCS15_SHA256 1 3 6 1 5 5 7 6 38 */
+    1504,    /* OBJ_ML_DSA_44_Ed25519_SHA512     1 3 6 1 5 5 7 6 39 */
+    1505,    /* OBJ_ML_DSA_44_ECDSA_P256_SHA256  1 3 6 1 5 5 7 6 40 */
+    1506,    /* OBJ_ML_DSA_65_RSA3072_PSS_SHA512 1 3 6 1 5 5 7 6 41 */
+    1507,    /* OBJ_ML_DSA_65_RSA3072_PKCS15_SHA512 1 3 6 1 5 5 7 6 42 */
+    1508,    /* OBJ_ML_DSA_65_RSA4096_PSS_SHA512 1 3 6 1 5 5 7 6 43 */
+    1509,    /* OBJ_ML_DSA_65_RSA4096_PKCS15_SHA512 1 3 6 1 5 5 7 6 44 */
+    1510,    /* OBJ_ML_DSA_65_ECDSA_P256_SHA512  1 3 6 1 5 5 7 6 45 */
+    1511,    /* OBJ_ML_DSA_65_ECDSA_P384_SHA512  1 3 6 1 5 5 7 6 46 */
+    1512,    /* OBJ_ML_DSA_65_ECDSA_brainpoolP256r1_SHA512 1 3 6 1 5 5 7 6 47 */
+    1513,    /* OBJ_ML_DSA_65_Ed25519_SHA512     1 3 6 1 5 5 7 6 48 */
+    1514,    /* OBJ_ML_DSA_87_ECDSA_P384_SHA512  1 3 6 1 5 5 7 6 49 */
+    1515,    /* OBJ_ML_DSA_87_ECDSA_brainpoolP384r1_SHA512 1 3 6 1 5 5 7 6 50 */
+    1516,    /* OBJ_ML_DSA_87_Ed448_SHAKE256     1 3 6 1 5 5 7 6 51 */
+    1517,    /* OBJ_ML_DSA_87_RSA3072_PSS_SHA512 1 3 6 1 5 5 7 6 52 */
+    1518,    /* OBJ_ML_DSA_87_RSA4096_PSS_SHA512 1 3 6 1 5 5 7 6 53 */
+    1519,    /* OBJ_ML_DSA_87_ECDSA_P521_SHA512  1 3 6 1 5 5 7 6 54 */
      327,    /* OBJ_id_cmc_statusInfo            1 3 6 1 5 5 7 7 1 */
      328,    /* OBJ_id_cmc_identification        1 3 6 1 5 5 7 7 2 */
      329,    /* OBJ_id_cmc_identityProof         1 3 6 1 5 5 7 7 3 */
