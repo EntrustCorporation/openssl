@@ -319,7 +319,7 @@ static int composite_get_params(void *keydata, OSSL_PARAM params[])
     if (key == NULL || !composite_get_params_decoder(params, &p))
         return 0;
 
-    if (p.bits != NULL && !OSSL_PARAM_set_int(p.bits, 8 * ossl_composite_key_get_pub_len(key)))
+    if (p.bits != NULL && !OSSL_PARAM_set_int(p.bits, (int)(8 * ossl_composite_key_get_pub_len(key))))
         return 0;
 
     if (p.secbits != NULL && !OSSL_PARAM_set_int(p.secbits, ossl_composite_key_get_security_bits(key)))
