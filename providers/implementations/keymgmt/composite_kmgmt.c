@@ -259,13 +259,19 @@ static void *composite_gen(void *genctx, int evp_type,
     }
 
     if (strcmp(classic_alg, "RSA") == 0) {
+        unsigned int rsa_bits = (unsigned int)classic_bits;
+        OSSL_PARAM rsa_params[2];
+
+        rsa_params[0] = OSSL_PARAM_construct_uint(OSSL_PKEY_PARAM_RSA_BITS,
+            &rsa_bits);
+        rsa_params[1] = OSSL_PARAM_construct_end();
         ctx = EVP_PKEY_CTX_new_from_name(PROV_LIBCTX_OF(gctx->provctx),
             "RSA", gctx->propq);
         if (ctx == NULL)
             goto err;
         if (EVP_PKEY_keygen_init(ctx) <= 0)
             goto err;
-        if (EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, classic_bits) <= 0)
+        if (EVP_PKEY_CTX_set_params(ctx, rsa_params) <= 0)
             goto err;
         if (EVP_PKEY_keygen(ctx, &key->classic_key) <= 0)
             goto err;

@@ -31,6 +31,10 @@ OpenSSL Releases
 
 ### Changes between 4.0 and 4.1 [xx XXX xxxx]
 
+ * Added Composite key generation and signing. 
+
+   *Felipe Ventura*
+
  * Added -testmode option for `s_time` app.
 
    *Jakub Zelenka*

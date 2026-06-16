@@ -1063,7 +1063,36 @@ composite_d2i_pubkey_common(const unsigned char *der, long der_len,
     struct der2key_ctx_st *ctx)
 {
     const unsigned char *pk;
-    int pk_len;
+    const unsigned char *p = der;
+    long outer_len, algo_len;
+    int tag, xclass, inf, pk_len;
+    ASN1_OBJECT *oid = NULL;
+
+    /*
+     * Peek at the AlgorithmIdentifier OID to reject structures that don't
+     * belong to this composite variant, without calling d2i_X509_PUBKEY
+     * (which would re-enter the OSSL_DECODER chain and recurse infinitely).
+     */
+
+    /* Outer SEQUENCE */
+    inf = ASN1_get_object(&p, &outer_len, &tag, &xclass, der_len);
+    if ((inf & 0x80) || tag != V_ASN1_SEQUENCE)
+        return NULL;
+
+    /* AlgorithmIdentifier SEQUENCE header */
+    inf = ASN1_get_object(&p, &algo_len, &tag, &xclass, outer_len);
+    if ((inf & 0x80) || tag != V_ASN1_SEQUENCE || algo_len <= 0)
+        return NULL;
+
+    /* OID inside AlgorithmIdentifier */
+    oid = d2i_ASN1_OBJECT(NULL, &p, algo_len);
+    if (oid == NULL)
+        return NULL;
+    if (OBJ_obj2nid(oid) != ctx->desc->evp_type) {
+        ASN1_OBJECT_free(oid);
+        return NULL;
+    }
+    ASN1_OBJECT_free(oid);
 
     pk = composite_spki_bitstring_body(der, der_len, &pk_len);
     if (pk == NULL)
@@ -1084,13 +1113,18 @@ composite_d2i_prvkey_common(const unsigned char *der, long der_len,
     const unsigned char *ptr = der;
     COMPOSITE_KEY *key = NULL;
     const unsigned char *privbytes;
+    const X509_ALGOR *alg = NULL;
     int privlen;
 
     p8inf = d2i_PKCS8_PRIV_KEY_INFO(NULL, &ptr, der_len);
     if (p8inf == NULL)
         return NULL;
 
-    if (!PKCS8_pkey_get0(NULL, &privbytes, &privlen, NULL, p8inf))
+    if (!PKCS8_pkey_get0(NULL, &privbytes, &privlen, &alg, p8inf))
+        goto done;
+
+    /* Reject structures whose OID doesn't match this composite variant. */
+    if (alg == NULL || OBJ_obj2nid(alg->algorithm) != ctx->desc->evp_type)
         goto done;
 
     key = ossl_composite_d2i_prvkey(privbytes, privlen, ml_dsa_evp_type,
@@ -1147,7 +1181,7 @@ MAKE_COMPOSITE_D2I(mldsa87_rsa4096_pss_sha512, EVP_PKEY_ML_DSA_87, "RSA", NULL)
 MAKE_COMPOSITE_D2I(mldsa87_ecdsa_p521_sha512, EVP_PKEY_ML_DSA_87, "EC", "P-521")
 
 /* Supporting #defines consumed by DO_SubjectPublicKeyInfo / DO_PrivateKeyInfo macros */
-#define mldsa44_rsa2048_pss_sha256_evp_type 0
+#define mldsa44_rsa2048_pss_sha256_evp_type NID_ML_DSA_44_RSA2048_PSS_SHA256
 #define mldsa44_rsa2048_pss_sha256_d2i_private_key NULL
 #define mldsa44_rsa2048_pss_sha256_d2i_public_key NULL
 #define mldsa44_rsa2048_pss_sha256_d2i_key_params NULL
@@ -1155,7 +1189,7 @@ MAKE_COMPOSITE_D2I(mldsa87_ecdsa_p521_sha512, EVP_PKEY_ML_DSA_87, "EC", "P-521")
 #define mldsa44_rsa2048_pss_sha256_adjust NULL
 #define mldsa44_rsa2048_pss_sha256_free (free_key_fn *)ossl_composite_key_free
 
-#define mldsa44_rsa2048_pkcs15_sha256_evp_type 0
+#define mldsa44_rsa2048_pkcs15_sha256_evp_type NID_ML_DSA_44_RSA2048_PKCS15_SHA256
 #define mldsa44_rsa2048_pkcs15_sha256_d2i_private_key NULL
 #define mldsa44_rsa2048_pkcs15_sha256_d2i_public_key NULL
 #define mldsa44_rsa2048_pkcs15_sha256_d2i_key_params NULL
@@ -1163,7 +1197,7 @@ MAKE_COMPOSITE_D2I(mldsa87_ecdsa_p521_sha512, EVP_PKEY_ML_DSA_87, "EC", "P-521")
 #define mldsa44_rsa2048_pkcs15_sha256_adjust NULL
 #define mldsa44_rsa2048_pkcs15_sha256_free (free_key_fn *)ossl_composite_key_free
 
-#define mldsa44_ed25519_sha512_evp_type 0
+#define mldsa44_ed25519_sha512_evp_type NID_ML_DSA_44_Ed25519_SHA512
 #define mldsa44_ed25519_sha512_d2i_private_key NULL
 #define mldsa44_ed25519_sha512_d2i_public_key NULL
 #define mldsa44_ed25519_sha512_d2i_key_params NULL
@@ -1171,7 +1205,7 @@ MAKE_COMPOSITE_D2I(mldsa87_ecdsa_p521_sha512, EVP_PKEY_ML_DSA_87, "EC", "P-521")
 #define mldsa44_ed25519_sha512_adjust NULL
 #define mldsa44_ed25519_sha512_free (free_key_fn *)ossl_composite_key_free
 
-#define mldsa44_ecdsa_p256_sha256_evp_type 0
+#define mldsa44_ecdsa_p256_sha256_evp_type NID_ML_DSA_44_ECDSA_P256_SHA256
 #define mldsa44_ecdsa_p256_sha256_d2i_private_key NULL
 #define mldsa44_ecdsa_p256_sha256_d2i_public_key NULL
 #define mldsa44_ecdsa_p256_sha256_d2i_key_params NULL
@@ -1179,7 +1213,7 @@ MAKE_COMPOSITE_D2I(mldsa87_ecdsa_p521_sha512, EVP_PKEY_ML_DSA_87, "EC", "P-521")
 #define mldsa44_ecdsa_p256_sha256_adjust NULL
 #define mldsa44_ecdsa_p256_sha256_free (free_key_fn *)ossl_composite_key_free
 
-#define mldsa65_rsa3072_pss_sha512_evp_type 0
+#define mldsa65_rsa3072_pss_sha512_evp_type NID_ML_DSA_65_RSA3072_PSS_SHA512
 #define mldsa65_rsa3072_pss_sha512_d2i_private_key NULL
 #define mldsa65_rsa3072_pss_sha512_d2i_public_key NULL
 #define mldsa65_rsa3072_pss_sha512_d2i_key_params NULL
@@ -1187,7 +1221,7 @@ MAKE_COMPOSITE_D2I(mldsa87_ecdsa_p521_sha512, EVP_PKEY_ML_DSA_87, "EC", "P-521")
 #define mldsa65_rsa3072_pss_sha512_adjust NULL
 #define mldsa65_rsa3072_pss_sha512_free (free_key_fn *)ossl_composite_key_free
 
-#define mldsa65_rsa3072_pkcs15_sha512_evp_type 0
+#define mldsa65_rsa3072_pkcs15_sha512_evp_type NID_ML_DSA_65_RSA3072_PKCS15_SHA512
 #define mldsa65_rsa3072_pkcs15_sha512_d2i_private_key NULL
 #define mldsa65_rsa3072_pkcs15_sha512_d2i_public_key NULL
 #define mldsa65_rsa3072_pkcs15_sha512_d2i_key_params NULL
@@ -1195,7 +1229,7 @@ MAKE_COMPOSITE_D2I(mldsa87_ecdsa_p521_sha512, EVP_PKEY_ML_DSA_87, "EC", "P-521")
 #define mldsa65_rsa3072_pkcs15_sha512_adjust NULL
 #define mldsa65_rsa3072_pkcs15_sha512_free (free_key_fn *)ossl_composite_key_free
 
-#define mldsa65_rsa4096_pss_sha512_evp_type 0
+#define mldsa65_rsa4096_pss_sha512_evp_type NID_ML_DSA_65_RSA4096_PSS_SHA512
 #define mldsa65_rsa4096_pss_sha512_d2i_private_key NULL
 #define mldsa65_rsa4096_pss_sha512_d2i_public_key NULL
 #define mldsa65_rsa4096_pss_sha512_d2i_key_params NULL
@@ -1203,7 +1237,7 @@ MAKE_COMPOSITE_D2I(mldsa87_ecdsa_p521_sha512, EVP_PKEY_ML_DSA_87, "EC", "P-521")
 #define mldsa65_rsa4096_pss_sha512_adjust NULL
 #define mldsa65_rsa4096_pss_sha512_free (free_key_fn *)ossl_composite_key_free
 
-#define mldsa65_rsa4096_pkcs15_sha512_evp_type 0
+#define mldsa65_rsa4096_pkcs15_sha512_evp_type NID_ML_DSA_65_RSA4096_PKCS15_SHA512
 #define mldsa65_rsa4096_pkcs15_sha512_d2i_private_key NULL
 #define mldsa65_rsa4096_pkcs15_sha512_d2i_public_key NULL
 #define mldsa65_rsa4096_pkcs15_sha512_d2i_key_params NULL
@@ -1211,7 +1245,7 @@ MAKE_COMPOSITE_D2I(mldsa87_ecdsa_p521_sha512, EVP_PKEY_ML_DSA_87, "EC", "P-521")
 #define mldsa65_rsa4096_pkcs15_sha512_adjust NULL
 #define mldsa65_rsa4096_pkcs15_sha512_free (free_key_fn *)ossl_composite_key_free
 
-#define mldsa65_ecdsa_p256_sha512_evp_type 0
+#define mldsa65_ecdsa_p256_sha512_evp_type NID_ML_DSA_65_ECDSA_P256_SHA512
 #define mldsa65_ecdsa_p256_sha512_d2i_private_key NULL
 #define mldsa65_ecdsa_p256_sha512_d2i_public_key NULL
 #define mldsa65_ecdsa_p256_sha512_d2i_key_params NULL
@@ -1219,7 +1253,7 @@ MAKE_COMPOSITE_D2I(mldsa87_ecdsa_p521_sha512, EVP_PKEY_ML_DSA_87, "EC", "P-521")
 #define mldsa65_ecdsa_p256_sha512_adjust NULL
 #define mldsa65_ecdsa_p256_sha512_free (free_key_fn *)ossl_composite_key_free
 
-#define mldsa65_ecdsa_p384_sha512_evp_type 0
+#define mldsa65_ecdsa_p384_sha512_evp_type NID_ML_DSA_65_ECDSA_P384_SHA512
 #define mldsa65_ecdsa_p384_sha512_d2i_private_key NULL
 #define mldsa65_ecdsa_p384_sha512_d2i_public_key NULL
 #define mldsa65_ecdsa_p384_sha512_d2i_key_params NULL
@@ -1227,7 +1261,7 @@ MAKE_COMPOSITE_D2I(mldsa87_ecdsa_p521_sha512, EVP_PKEY_ML_DSA_87, "EC", "P-521")
 #define mldsa65_ecdsa_p384_sha512_adjust NULL
 #define mldsa65_ecdsa_p384_sha512_free (free_key_fn *)ossl_composite_key_free
 
-#define mldsa65_ecdsa_brainpoolP256r1_sha512_evp_type 0
+#define mldsa65_ecdsa_brainpoolP256r1_sha512_evp_type NID_ML_DSA_65_ECDSA_brainpoolP256r1_SHA512
 #define mldsa65_ecdsa_brainpoolP256r1_sha512_d2i_private_key NULL
 #define mldsa65_ecdsa_brainpoolP256r1_sha512_d2i_public_key NULL
 #define mldsa65_ecdsa_brainpoolP256r1_sha512_d2i_key_params NULL
@@ -1235,7 +1269,7 @@ MAKE_COMPOSITE_D2I(mldsa87_ecdsa_p521_sha512, EVP_PKEY_ML_DSA_87, "EC", "P-521")
 #define mldsa65_ecdsa_brainpoolP256r1_sha512_adjust NULL
 #define mldsa65_ecdsa_brainpoolP256r1_sha512_free (free_key_fn *)ossl_composite_key_free
 
-#define mldsa65_ed25519_sha512_evp_type 0
+#define mldsa65_ed25519_sha512_evp_type NID_ML_DSA_65_Ed25519_SHA512
 #define mldsa65_ed25519_sha512_d2i_private_key NULL
 #define mldsa65_ed25519_sha512_d2i_public_key NULL
 #define mldsa65_ed25519_sha512_d2i_key_params NULL
@@ -1243,7 +1277,7 @@ MAKE_COMPOSITE_D2I(mldsa87_ecdsa_p521_sha512, EVP_PKEY_ML_DSA_87, "EC", "P-521")
 #define mldsa65_ed25519_sha512_adjust NULL
 #define mldsa65_ed25519_sha512_free (free_key_fn *)ossl_composite_key_free
 
-#define mldsa87_ecdsa_p384_sha512_evp_type 0
+#define mldsa87_ecdsa_p384_sha512_evp_type NID_ML_DSA_87_ECDSA_P384_SHA512
 #define mldsa87_ecdsa_p384_sha512_d2i_private_key NULL
 #define mldsa87_ecdsa_p384_sha512_d2i_public_key NULL
 #define mldsa87_ecdsa_p384_sha512_d2i_key_params NULL
@@ -1251,7 +1285,7 @@ MAKE_COMPOSITE_D2I(mldsa87_ecdsa_p521_sha512, EVP_PKEY_ML_DSA_87, "EC", "P-521")
 #define mldsa87_ecdsa_p384_sha512_adjust NULL
 #define mldsa87_ecdsa_p384_sha512_free (free_key_fn *)ossl_composite_key_free
 
-#define mldsa87_ecdsa_brainpoolP384r1_sha512_evp_type 0
+#define mldsa87_ecdsa_brainpoolP384r1_sha512_evp_type NID_ML_DSA_87_ECDSA_brainpoolP384r1_SHA512
 #define mldsa87_ecdsa_brainpoolP384r1_sha512_d2i_private_key NULL
 #define mldsa87_ecdsa_brainpoolP384r1_sha512_d2i_public_key NULL
 #define mldsa87_ecdsa_brainpoolP384r1_sha512_d2i_key_params NULL
@@ -1259,7 +1293,7 @@ MAKE_COMPOSITE_D2I(mldsa87_ecdsa_p521_sha512, EVP_PKEY_ML_DSA_87, "EC", "P-521")
 #define mldsa87_ecdsa_brainpoolP384r1_sha512_adjust NULL
 #define mldsa87_ecdsa_brainpoolP384r1_sha512_free (free_key_fn *)ossl_composite_key_free
 
-#define mldsa87_ed448_shake256_evp_type 0
+#define mldsa87_ed448_shake256_evp_type NID_ML_DSA_87_Ed448_SHAKE256
 #define mldsa87_ed448_shake256_d2i_private_key NULL
 #define mldsa87_ed448_shake256_d2i_public_key NULL
 #define mldsa87_ed448_shake256_d2i_key_params NULL
@@ -1267,7 +1301,7 @@ MAKE_COMPOSITE_D2I(mldsa87_ecdsa_p521_sha512, EVP_PKEY_ML_DSA_87, "EC", "P-521")
 #define mldsa87_ed448_shake256_adjust NULL
 #define mldsa87_ed448_shake256_free (free_key_fn *)ossl_composite_key_free
 
-#define mldsa87_rsa3072_pss_sha512_evp_type 0
+#define mldsa87_rsa3072_pss_sha512_evp_type NID_ML_DSA_87_RSA3072_PSS_SHA512
 #define mldsa87_rsa3072_pss_sha512_d2i_private_key NULL
 #define mldsa87_rsa3072_pss_sha512_d2i_public_key NULL
 #define mldsa87_rsa3072_pss_sha512_d2i_key_params NULL
@@ -1275,7 +1309,7 @@ MAKE_COMPOSITE_D2I(mldsa87_ecdsa_p521_sha512, EVP_PKEY_ML_DSA_87, "EC", "P-521")
 #define mldsa87_rsa3072_pss_sha512_adjust NULL
 #define mldsa87_rsa3072_pss_sha512_free (free_key_fn *)ossl_composite_key_free
 
-#define mldsa87_rsa4096_pss_sha512_evp_type 0
+#define mldsa87_rsa4096_pss_sha512_evp_type NID_ML_DSA_87_RSA4096_PSS_SHA512
 #define mldsa87_rsa4096_pss_sha512_d2i_private_key NULL
 #define mldsa87_rsa4096_pss_sha512_d2i_public_key NULL
 #define mldsa87_rsa4096_pss_sha512_d2i_key_params NULL
@@ -1283,7 +1317,7 @@ MAKE_COMPOSITE_D2I(mldsa87_ecdsa_p521_sha512, EVP_PKEY_ML_DSA_87, "EC", "P-521")
 #define mldsa87_rsa4096_pss_sha512_adjust NULL
 #define mldsa87_rsa4096_pss_sha512_free (free_key_fn *)ossl_composite_key_free
 
-#define mldsa87_ecdsa_p521_sha512_evp_type 0
+#define mldsa87_ecdsa_p521_sha512_evp_type NID_ML_DSA_87_ECDSA_P521_SHA512
 #define mldsa87_ecdsa_p521_sha512_d2i_private_key NULL
 #define mldsa87_ecdsa_p521_sha512_d2i_public_key NULL
 #define mldsa87_ecdsa_p521_sha512_d2i_key_params NULL
