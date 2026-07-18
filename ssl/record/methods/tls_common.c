@@ -497,7 +497,7 @@ static int tls_record_app_data_waiting(OSSL_RECORD_LAYER *rl)
 static int rlayer_early_data_count_ok(OSSL_RECORD_LAYER *rl, size_t length,
     size_t overhead, int send)
 {
-    uint32_t max_early_data = rl->max_early_data;
+    uint64_t max_early_data = rl->max_early_data;
 
     if (max_early_data == 0) {
         RLAYERfatal(rl, send ? SSL_AD_INTERNAL_ERROR : SSL_AD_UNEXPECTED_MESSAGE,
@@ -506,7 +506,7 @@ static int rlayer_early_data_count_ok(OSSL_RECORD_LAYER *rl, size_t length,
     }
 
     /* If we are dealing with ciphertext we need to allow for the overhead */
-    max_early_data += (uint32_t)overhead;
+    max_early_data += overhead;
 
     if (rl->early_data_count + length > max_early_data) {
         RLAYERfatal(rl, send ? SSL_AD_INTERNAL_ERROR : SSL_AD_UNEXPECTED_MESSAGE,
@@ -525,8 +525,6 @@ static int rlayer_early_data_count_ok(OSSL_RECORD_LAYER *rl, size_t length,
  * cause tls_get_more_records to loop forever.
  */
 #define MAX_EMPTY_RECORDS 32
-
-#define SSL2_RT_HEADER_LENGTH 2
 
 /*-
  * Call this to buffer new input records in rl->rrec.
@@ -626,12 +624,7 @@ int tls_get_more_records(OSSL_RECORD_LAYER *rl)
          * rl->rstate == SSL_ST_READ_BODY, get and decode the data. Calculate
          * how much more data we need to read for the rest of the record
          */
-        if (thisrr->rec_version == SSL2_VERSION) {
-            more = thisrr->length + SSL2_RT_HEADER_LENGTH
-                - SSL3_RT_HEADER_LENGTH;
-        } else {
-            more = thisrr->length;
-        }
+        more = thisrr->length;
 
         if (more > 0) {
             /* now rl->packet_length == SSL3_RT_HEADER_LENGTH */
@@ -646,13 +639,9 @@ int tls_get_more_records(OSSL_RECORD_LAYER *rl)
 
         /*
          * At this point, rl->packet_length == SSL3_RT_HEADER_LENGTH
-         * + thisrr->length, or rl->packet_length == SSL2_RT_HEADER_LENGTH
          * + thisrr->length and we have that many bytes in rl->packet
          */
-        if (thisrr->rec_version == SSL2_VERSION)
-            thisrr->input = &(rl->packet[SSL2_RT_HEADER_LENGTH]);
-        else
-            thisrr->input = &(rl->packet[SSL3_RT_HEADER_LENGTH]);
+        thisrr->input = &(rl->packet[SSL3_RT_HEADER_LENGTH]);
 
         /*
          * ok, we can now read from 'rl->packet' data into 'thisrr'.
@@ -1349,7 +1338,7 @@ tls_new_record_layer(OSSL_LIB_CTX *libctx, const char *propq, int vers,
     int mactype,
     const EVP_MD *md, COMP_METHOD *comp,
     const EVP_MD *kdfdigest, BIO *prev, BIO *transport,
-    BIO *next, BIO_ADDR *local, BIO_ADDR *peer,
+    BIO *next,
     const OSSL_PARAM *settings, const OSSL_PARAM *options,
     const OSSL_DISPATCH *fns, void *cbarg, void *rlarg,
     OSSL_RECORD_LAYER **retrl)
@@ -1412,8 +1401,6 @@ static void tls_int_free(OSSL_RECORD_LAYER *rl)
 #endif
     OPENSSL_free(rl->iv);
     OPENSSL_free(rl->nonce);
-    if (rl->version == SSL3_VERSION)
-        OPENSSL_cleanse(rl->mac_secret, sizeof(rl->mac_secret));
 
     TLS_RL_RECORD_release(rl->rrec, SSL_MAX_PIPELINES);
 

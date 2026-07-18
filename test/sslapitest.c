@@ -136,6 +136,7 @@ static const char *ocsp_signer_cert = "subinterCA.pem";
     && defined(OPENSSL_NO_BROTLI) && defined(OPENSSL_NO_ZSTD)     \
     && !defined(OPENSSL_NO_ECX) && !defined(OPENSSL_NO_DH)        \
     && !defined(OPENSSL_NO_ML_DSA) && !defined(OPENSSL_NO_ML_KEM) \
+    && !defined(OPENSSL_NO_SLH_DSA)                               \
     && !defined(OPENSSL_NO_TLS1_3) && !defined(OPENSSL_NO_SM2)
 #define DO_SSL_TRACE_TEST
 #endif
@@ -3027,6 +3028,58 @@ static int test_session_with_both_cache(void)
 #else
     return 1;
 #endif
+}
+
+/*
+ * Test that remove_session_cb is not invoked while ctx->lock is held.
+ * The callback calls SSL_CTX_flush_sessions_ex(), which itself tries to
+ * acquire ctx->lock; if the lock is already held when the callback fires,
+ * the nested acquisition deadlocks immediately.  t = 1 (Unix epoch + 1s) is
+ * used so that no current sessions are flushed and the callback is not
+ * re-entered.
+ */
+static void remove_session_lock_test_cb(SSL_CTX *ctx, SSL_SESSION *sess)
+{
+    SSL_CTX_flush_sessions_ex(ctx, 1);
+}
+
+static int test_remove_session_cb_not_under_lock(void)
+{
+    SSL_CTX *ctx = NULL;
+    SSL_SESSION *sess1 = NULL, *sess2 = NULL;
+    static const unsigned char sid1[] = { 1 };
+    static const unsigned char sid2[] = { 2 };
+    int testresult = 0;
+
+    if (!TEST_ptr(ctx = SSL_CTX_new_ex(libctx, NULL, TLS_server_method())))
+        goto end;
+
+    SSL_CTX_sess_set_cache_size(ctx, 1);
+    SSL_CTX_sess_set_remove_cb(ctx, remove_session_lock_test_cb);
+
+    if (!TEST_ptr(sess1 = SSL_SESSION_new())
+        || !TEST_true(SSL_SESSION_set1_id(sess1, sid1, sizeof(sid1)))
+        || !TEST_true(SSL_CTX_add_session(ctx, sess1)))
+        goto end;
+
+    if (!TEST_ptr(sess2 = SSL_SESSION_new())
+        || !TEST_true(SSL_SESSION_set1_id(sess2, sid2, sizeof(sid2))))
+        goto end;
+
+    /*
+     * Adding sess2 evicts sess1 (cache is full), firing remove_session_cb.
+     * If the callback is invoked while holding ctx->lock the flush call
+     * inside it will deadlock.
+     */
+    if (!TEST_true(SSL_CTX_add_session(ctx, sess2)))
+        goto end;
+
+    testresult = 1;
+end:
+    SSL_SESSION_free(sess1);
+    SSL_SESSION_free(sess2);
+    SSL_CTX_free(ctx);
+    return testresult;
 }
 
 static int test_session_wo_ca_names(void)
@@ -10600,7 +10653,8 @@ static int test_session_cache_overflow(int idx)
     SSL *serverssl = NULL, *clientssl = NULL;
     int testresult = 0;
     SSL_SESSION *sess = NULL;
-    int references;
+
+    get_sess_val = NULL;
 
 #ifdef OSSL_NO_USABLE_TLS1_3
     /* If no TLSv1.3 available then do nothing in this case */
@@ -10671,17 +10725,8 @@ static int test_session_cache_overflow(int idx)
      * The session we just negotiated may have been already removed from the
      * internal cache - but we will return it anyway from our external cache.
      */
-    get_sess_val = SSL_get_session(serverssl);
+    get_sess_val = SSL_get1_session(serverssl);
     if (!TEST_ptr(get_sess_val))
-        goto end;
-    /*
-     * Normally the session is also stored in the cache, thus we have more than
-     * one reference, but due to an out-of-memory error it can happen that this
-     * is the only reference, and in that case the SSL_free(serverssl) below
-     * would free the get_sess_val, causing a use-after-free error.
-     */
-    if (!TEST_true(CRYPTO_GET_REF(&get_sess_val->references, &references))
-        || !TEST_int_ge(references, 2))
         goto end;
     sess = SSL_get1_session(clientssl);
     if (!TEST_ptr(sess))
@@ -10706,6 +10751,8 @@ static int test_session_cache_overflow(int idx)
     testresult = 1;
 
 end:
+    SSL_SESSION_free(get_sess_val);
+    get_sess_val = NULL;
     SSL_free(serverssl);
     SSL_free(clientssl);
     SSL_CTX_free(sctx);
@@ -12392,7 +12439,7 @@ static int test_legacy_ec_point_formats(void)
 {
     SSL_CTX *cctx = NULL, *sctx = NULL;
     SSL *clientssl = NULL, *serverssl = NULL;
-    const char *pformats = NULL;
+    const unsigned char *pformats = NULL;
     int nformats;
     int testresult = 0;
 
@@ -12873,6 +12920,51 @@ end:
     SSL_CTX_free(cctx);
     return testresult;
 }
+
+static int un_ext_add_cb(SSL *s, unsigned int ext_type,
+    unsigned int context, const unsigned char **out, size_t *outlen, X509 *x,
+    size_t chainidx, int *al, void *add_arg)
+{
+    static const unsigned char data[] = { 0xaa };
+    *out = data;
+    *outlen = sizeof(data);
+    return 1;
+}
+
+static int un_ext_parse_cb(SSL *s, unsigned int ext_type,
+    unsigned int context, const unsigned char *in, size_t inlen, X509 *x,
+    size_t chainidx, int *al, void *parse_arg)
+{
+    return 1;
+}
+
+/*
+ * Test that a handshake succeeds when the peer sends an extension type we do
+ * not recognise. The client registers a custom extension in its ClientHello
+ * that the server knows nothing about, so on the server tls_collect_extensions()
+ * takes the "unknown extension" branch.
+ */
+static int test_tls13_unknown_extension(void)
+{
+    SSL_CTX *s = NULL, *c = NULL;
+    SSL *s_ssl = NULL, *c_ssl = NULL;
+    int test;
+
+    test = TEST_true(create_ssl_ctx_pair(libctx, TLS_server_method(),
+               TLS_client_method(), TLS1_3_VERSION, TLS1_3_VERSION, &s, &c, cert, privkey))
+        && TEST_true(SSL_CTX_add_custom_ext(c, 0xfefe, SSL_EXT_CLIENT_HELLO,
+            un_ext_add_cb, NULL, NULL, un_ext_parse_cb, NULL))
+        && TEST_true(create_ssl_objects(s, c, &s_ssl, &c_ssl, NULL, NULL))
+        /* The server must tolerate the unknown extension and complete. */
+        && TEST_true(create_ssl_connection(s_ssl, c_ssl, SSL_ERROR_NONE));
+
+    SSL_free(s_ssl);
+    SSL_free(c_ssl);
+    SSL_CTX_free(s);
+    SSL_CTX_free(c);
+    return test;
+}
+
 #endif /* OSSL_NO_USABLE_TLS1_3 */
 
 static int check_version_string(SSL *s, int version)
@@ -15179,6 +15271,7 @@ int setup_tests(void)
     ADD_TEST(test_session_with_only_int_cache);
     ADD_TEST(test_session_with_only_ext_cache);
     ADD_TEST(test_session_with_both_cache);
+    ADD_TEST(test_remove_session_cb_not_under_lock);
     ADD_TEST(test_session_wo_ca_names);
 #ifndef OSSL_NO_USABLE_TLS1_3
     ADD_ALL_TESTS(test_stateful_tickets, 3);
@@ -15332,6 +15425,7 @@ int setup_tests(void)
 #ifndef OSSL_NO_USABLE_TLS1_3
     ADD_TEST(test_read_ahead_key_change);
     ADD_ALL_TESTS(test_tls13_record_padding, 6);
+    ADD_TEST(test_tls13_unknown_extension);
 #endif
 #if !defined(OPENSSL_NO_TLS1_2) && !defined(OSSL_NO_USABLE_TLS1_3)
     ADD_ALL_TESTS(test_serverinfo_custom, 4);

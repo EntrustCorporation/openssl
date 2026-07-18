@@ -511,10 +511,6 @@ static int ssl_check_allowed_versions(int min_version, int max_version)
             max_version = TLS1_VERSION;
 #endif
 #ifdef OPENSSL_NO_TLS1
-        if (max_version == TLS1_VERSION)
-            max_version = SSL3_VERSION;
-#endif
-#ifdef OPENSSL_NO_TLS1
         if (min_version == TLS1_VERSION)
             min_version = TLS1_1_VERSION;
 #endif
@@ -823,15 +819,6 @@ SSL *ossl_ssl_connection_new_int(SSL_CTX *ctx, SSL *user_ssl,
         goto err;
 
     s->session_ctx = ctx;
-    if (ctx->ext.ecpointformats != NULL) {
-        s->ext.ecpointformats = OPENSSL_memdup(ctx->ext.ecpointformats,
-            ctx->ext.ecpointformats_len);
-        if (s->ext.ecpointformats == NULL) {
-            s->ext.ecpointformats_len = 0;
-            goto err;
-        }
-        s->ext.ecpointformats_len = ctx->ext.ecpointformats_len;
-    }
     if (ctx->ext.supportedgroups != NULL) {
         size_t add = 0;
 
@@ -1531,7 +1518,6 @@ void ossl_ssl_connection_free(SSL *ssl)
 
     OPENSSL_free(s->ext.hostname);
     SSL_CTX_free(s->session_ctx);
-    OPENSSL_free(s->ext.ecpointformats);
     OPENSSL_free(s->ext.peer_ecpointformats);
     OPENSSL_free(s->ext.supportedgroups);
     OPENSSL_free(s->ext.keyshares);
@@ -3469,7 +3455,7 @@ STACK_OF(SSL_CIPHER) *SSL_get1_supported_ciphers(SSL *s)
         return NULL;
     for (i = 0; i < sk_SSL_CIPHER_num(ciphers); i++) {
         const SSL_CIPHER *c = sk_SSL_CIPHER_value(ciphers, i);
-        if (!ssl_cipher_disabled(sc, c, SSL_SECOP_CIPHER_SUPPORTED, 0)) {
+        if (!ssl_cipher_disabled(sc, c, SSL_SECOP_CIPHER_SUPPORTED)) {
             if (!sk)
                 sk = sk_SSL_CIPHER_new_null();
             if (!sk)
@@ -4620,7 +4606,6 @@ void SSL_CTX_free(SSL_CTX *a)
     ssl_ctx_srp_ctx_free_intern(a);
 #endif
 
-    OPENSSL_free(a->ext.ecpointformats);
     OPENSSL_free(a->ext.supportedgroups);
     OPENSSL_free(a->ext.keyshares);
     OPENSSL_free(a->ext.tuples);

@@ -17,7 +17,7 @@ use File::Compare qw/compare_text/;
 
 setup("test_x509");
 
-plan tests => 151;
+plan tests => 153;
 
 # Prevent MSys2 filename munging for arguments that look like file paths but
 # aren't
@@ -569,6 +569,61 @@ has_version($b_cert, 3);
 has_SKID($b_cert, 1);
 has_AKID($b_cert, 1);
 
+subtest "signing with -sigopt and verifying a CSR with -vfyopt" => sub {
+    plan tests => 6;
+
+    # -sigopt is passed to the signature algorithm; force RSA-PSS padding
+    # and check it ends up in the issued certificate.
+    my $pss_cert = "sigopt-pss.pem";
+    ok(run(app(["openssl", "x509", "-req", "-CAcreateserial",
+                "-CA", $ca_cert, "-CAkey", $ca_key,
+                "-sigopt", "rsa_padding_mode:pss",
+                "-in", $b_csr, "-out", $pss_cert])),
+       "sign cert from CSR with -sigopt rsa_padding_mode:pss");
+    cert_contains($pss_cert, "Signature Algorithm: rsassaPss", 1,
+                  "issued cert is signed with PSS as selected via -sigopt");
+
+    # An unknown -sigopt must abort signing.
+    ok(!run(app(["openssl", "x509", "-req", "-CAcreateserial",
+                 "-CA", $ca_cert, "-CAkey", $ca_key,
+                 "-sigopt", "bogus:1",
+                 "-in", $b_csr, "-out", "sigopt-bogus.pem"])),
+       "an unknown -sigopt makes signing fail");
+
+    # An unknown -vfyopt must abort CSR verification.
+    ok(!run(app(["openssl", "x509", "-req", "-CAcreateserial",
+                 "-CA", $ca_cert, "-CAkey", $ca_key,
+                 "-vfyopt", "bogus:1",
+                 "-in", $b_csr, "-out", "vfyopt-bogus.pem"])),
+       "an unknown -vfyopt makes CSR verification fail");
+
+    SKIP: {
+        skip "SM2 is not supported by this OpenSSL build", 2 if disabled("sm2");
+
+        # -vfyopt is used to verify the CSR self-signature. Sign an SM2 CSR
+        # with a non-default distinguishing id so that the id must be supplied
+        # via -vfyopt for verification to succeed.
+        my $sm2_key = "sm2-vfyopt-key.pem";
+        my $sm2_csr = "sm2-vfyopt.csr";
+        my $distid = "0102030405060708";
+        run(app(["openssl", "req", "-new", "-newkey", "sm2",
+                 "-keyout", $sm2_key, "-out", $sm2_csr, "-nodes",
+                 "-config", $cnf, "-subj", "/CN=SM2",
+                 "-sigopt", "distid:$distid"]));
+
+        ok(run(app(["openssl", "x509", "-req", "-CAcreateserial",
+                    "-CA", $ca_cert, "-CAkey", $ca_key,
+                    "-vfyopt", "distid:$distid",
+                    "-in", $sm2_csr, "-out", "sm2-vfyopt.pem"])),
+           "SM2 CSR verifies when its distid is given via -vfyopt");
+
+        ok(!run(app(["openssl", "x509", "-req", "-CAcreateserial",
+                     "-CA", $ca_cert, "-CAkey", $ca_key,
+                     "-in", $sm2_csr, "-out", "sm2-novfyopt.pem"])),
+           "SM2 CSR fails to verify without the matching -vfyopt distid");
+    }
+};
+
 # Tests for https://github.com/openssl/openssl/issues/10442 (fixed in 1.1.1a)
 # (incorrect default `-CAcreateserial` if `-CA` path has a dot in it)
 my $folder_with_dot = "test_x509.folder";
@@ -709,3 +764,42 @@ ok(!run(app(["openssl", "x509", "-multi", "-checkend",
 # Bad parse still returns non-zero
 ok(!run(app(["openssl", "x509", "-checkend", "60", "-in", $c_key])),
     "Bad parse with -checkend returns non-zero");
+
+# Signing using DER-encoded key and CA cert/key inputs,
+# exercising -keyform, -CAform and -CAkeyform
+subtest 'x509 signing with DER -keyform, -CAform and -CAkeyform' => sub {
+    plan tests => 6;
+
+    my $csr = srctop_file(@certs, "x509-check.csr");
+    my $signkey_der = "x509-check-key.der";
+    my $cacert_der = "ca-cert.der";
+    my $cakey_der = "ca-key.der";
+
+    # self-sign the CSR with a DER-encoded signing key
+    ok(run(app(["openssl", "pkey",
+                "-in", srctop_file(@certs, "x509-check-key.pem"),
+                "-outform", "DER", "-out", $signkey_der])),
+       "convert signing key to DER");
+    ok(run(app(["openssl", "x509", "-req", "-in", $csr,
+                "-signkey", $signkey_der, "-keyform", "DER",
+                "-out", "x509-self-der.pem"])),
+       "self-sign CSR with -keyform DER");
+
+    # sign the CSR with a DER-encoded CA cert and CA key
+    ok(run(app(["openssl", "x509",
+                "-in", srctop_file(@certs, "ca-cert.pem"),
+                "-outform", "DER", "-out", $cacert_der])),
+       "convert CA cert to DER");
+    ok(run(app(["openssl", "pkey",
+                "-in", srctop_file(@certs, "ca-key.pem"),
+                "-outform", "DER", "-out", $cakey_der])),
+       "convert CA key to DER");
+    my $caout = "ca-issued-der.pem";
+    ok(run(app(["openssl", "x509", "-req", "-in", $csr,
+                "-CA", $cacert_der, "-CAform", "DER",
+                "-CAkey", $cakey_der, "-CAkeyform", "DER",
+                "-CAcreateserial", "-text", "-out", $caout])),
+       "sign CSR with -CAform DER and -CAkeyform DER");
+    ok(get_issuer($caout) =~ /CN=CA/,
+       "issuer of CA-signed cert matches DER CA cert");
+};

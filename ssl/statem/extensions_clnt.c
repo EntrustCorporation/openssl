@@ -201,6 +201,8 @@ EXT_RETURN tls_construct_ctos_srp(SSL_CONNECTION *s, WPACKET *pkt,
  * with the sole exception of psk-ke resumption, provided the client is sure
  * that the server will not want elect a full handshake. The check type then
  * indicates whether ECDHE or FFDHE negotiation should be performed.
+ *
+ * It returns 1 if negotiation is supported, 0 if it's not and -1 on error.
  */
 static int negotiate_dhe(SSL_CONNECTION *s, dhe_check_t check_type,
     int min_version, int max_version)
@@ -214,6 +216,8 @@ static int negotiate_dhe(SSL_CONNECTION *s, dhe_check_t check_type,
 
     /* See if we support any EC or FFDHE ciphersuites */
     cipher_stack = SSL_get1_supported_ciphers(ssl);
+    if (cipher_stack == NULL)
+        return -1;
     end = sk_SSL_CIPHER_num(cipher_stack);
     for (i = 0; i < end; i++) {
         const SSL_CIPHER *c = sk_SSL_CIPHER_value(cipher_stack, i);
@@ -263,15 +267,20 @@ EXT_RETURN tls_construct_ctos_ec_pt_formats(SSL_CONNECTION *s, WPACKET *pkt,
 {
     const unsigned char *pformats;
     size_t num_formats;
-    int reason, min_version, max_version;
+    int reason, min_version, max_version, dhe_result;
 
     reason = ssl_get_min_max_version(s, &min_version, &max_version, NULL);
     if (reason != 0) {
         SSLfatal(s, SSL_AD_INTERNAL_ERROR, reason);
         return EXT_RETURN_FAIL;
     }
-    if (!negotiate_dhe(s, ptfmt_check, min_version, max_version))
+    dhe_result = negotiate_dhe(s, ptfmt_check, min_version, max_version);
+    if (dhe_result == 0)
         return EXT_RETURN_NOT_SENT;
+    if (dhe_result < 0) {
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
+        return EXT_RETURN_FAIL;
+    }
 
     tls1_get_formatlist(s, &pformats, &num_formats);
     if (num_formats == 0)
@@ -314,7 +323,11 @@ EXT_RETURN tls_construct_ctos_supported_groups(SSL_CONNECTION *s, WPACKET *pkt,
      */
     use_ecdhe = negotiate_dhe(s, ecdhe_check, min_version, max_version);
     use_ffdhe = negotiate_dhe(s, ffdhe_check, min_version, max_version);
-    if (!use_ecdhe && !use_ffdhe
+    if (use_ecdhe < 0 || use_ffdhe < 0) {
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
+        return EXT_RETURN_FAIL;
+    }
+    if (use_ecdhe == 0 && use_ffdhe == 0
         && (dtls ? DTLS_VERSION_LE(max_version, DTLS1_2_VERSION)
                  : (max_version <= TLS1_2_VERSION)))
         return EXT_RETURN_NOT_SENT;
@@ -1747,46 +1760,6 @@ int tls_parse_stoc_server_name(SSL_CONNECTION *s, PACKET *pkt,
             return 0;
         }
     }
-    return 1;
-}
-
-int tls_parse_stoc_ec_pt_formats(SSL_CONNECTION *s, PACKET *pkt,
-    unsigned int context,
-    X509 *x, size_t chainidx)
-{
-    size_t ecpointformats_len;
-    PACKET ecptformatlist;
-
-    if (!PACKET_as_length_prefixed_1(pkt, &ecptformatlist)) {
-        SSLfatal(s, SSL_AD_DECODE_ERROR, SSL_R_BAD_EXTENSION);
-        return 0;
-    }
-    if (!s->hit) {
-        ecpointformats_len = PACKET_remaining(&ecptformatlist);
-        if (ecpointformats_len == 0) {
-            SSLfatal(s, SSL_AD_DECODE_ERROR, SSL_R_BAD_LENGTH);
-            return 0;
-        }
-
-        s->ext.peer_ecpointformats_len = 0;
-        OPENSSL_free(s->ext.peer_ecpointformats);
-        s->ext.peer_ecpointformats = OPENSSL_malloc(ecpointformats_len);
-        if (s->ext.peer_ecpointformats == NULL) {
-            s->ext.peer_ecpointformats_len = 0;
-            SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
-            return 0;
-        }
-
-        s->ext.peer_ecpointformats_len = ecpointformats_len;
-
-        if (!PACKET_copy_bytes(&ecptformatlist,
-                s->ext.peer_ecpointformats,
-                ecpointformats_len)) {
-            SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
-            return 0;
-        }
-    }
-
     return 1;
 }
 

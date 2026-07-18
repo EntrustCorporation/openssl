@@ -56,7 +56,7 @@ my ($no_des, $no_dh, $no_dsa, $no_ec, $no_ec2m, $no_rc2, $no_zlib)
 
 $no_rc2 = 1 if disabled("legacy");
 
-plan tests => 39;
+plan tests => 40;
 
 ok(run(test(["pkcs7_test"])), "test pkcs7");
 
@@ -115,6 +115,16 @@ my @smime_pkcs7_tests = (
     [ "signed content test streaming BER format, RSA",
       [ "{cmd1}", @prov, "-sign", "-in", $smcont, "-outform", "DER", "-nodetach",
         "-stream",
+        "-signer", $smrsa1, "-out", "{output}.cms" ],
+      [ "{cmd2}", @prov, "-verify", "-in", "{output}.cms", "-inform", "DER",
+        "-CAfile", $smroot, "-out", "{output}.txt" ],
+      \&final_compare
+    ],
+
+    [ "signed content DER format, two RSA signers with explicit -inkey",
+      [ "{cmd1}", @prov, "-sign", "-in", $smcont, "-outform", "DER", "-nodetach",
+        "-signer", catfile($smdir, "smrsa3-cert.pem"),
+        "-inkey", catfile($smdir, "smrsa3-key.pem"),
         "-signer", $smrsa1, "-out", "{output}.cms" ],
       [ "{cmd2}", @prov, "-verify", "-in", "{output}.cms", "-inform", "DER",
         "-CAfile", $smroot, "-out", "{output}.txt" ],
@@ -812,6 +822,18 @@ sub zero_compare {
     return (-e "$opts{output}.txt" && -z "$opts{output}.txt");
 }
 
+sub read_file_text {
+    my ($file) = @_;
+    open(my $fh, "<", $file) or return undef;
+    binmode $fh;
+    local $/;
+    my $data = <$fh>;
+    close($fh);
+    # Normalise line endings as -out is written in text mode on Windows.
+    $data =~ s/\r\n/\n/g if defined $data;
+    return $data;
+}
+
 subtest "CMS => PKCS#7 compatibility tests\n" => sub {
     plan tests => scalar @smime_pkcs7_tests;
 
@@ -1018,6 +1040,33 @@ subtest "CMS Decrypt message encrypted with OpenSSL 1.1.1\n" => sub {
            && compare_text($smcont, $out) == 0,
            "Decrypt message from OpenSSL 1.1.1");
     }
+};
+
+subtest "CMS decrypt authEnvelopedData with authenticated attributes\n" => sub {
+    plan tests => 4;
+
+    # BouncyCastle AES-128-GCM authEnvelopedData (KEK) carrying authAttrs;
+    # a clean decrypt confirms the authAttrs are verified as the AEAD AAD.
+    1 while unlink "authattrs.txt";
+    ok(run(app(["openssl", "cms", @defaultprov, "-decrypt", "-inform", "PEM",
+                "-secretkey", "000102030405060708090A0B0C0D0E0F",
+                "-secretkeyid", "C0FEE0",
+                "-in", catfile($datadir, "authenveloped_attrs.pem"),
+                "-out", "authattrs.txt" ])),
+       "decrypt authEnvelopedData with authAttrs");
+    is(read_file_text("authattrs.txt"), "Hello AuthEnvelopedData world\n",
+       "decrypted authEnvelopedData plaintext matches expected");
+
+    # A flipped authAttrs byte must fail the tag check and leave -out empty.
+    1 while unlink "bad_authattrs.txt";
+    ok(!run(app(["openssl", "cms", @defaultprov, "-decrypt", "-inform", "PEM",
+                 "-secretkey", "000102030405060708090A0B0C0D0E0F",
+                 "-secretkeyid", "C0FEE0",
+                 "-in", catfile($datadir, "bad_authenveloped_attrs.pem"),
+                 "-out", "bad_authattrs.txt" ])),
+       "reject authEnvelopedData with tampered authAttrs");
+    ok(!-s "bad_authattrs.txt",
+       "tampered authEnvelopedData leaks no plaintext to -out");
 };
 
 subtest "CAdES <=> CAdES consistency tests\n" => sub {

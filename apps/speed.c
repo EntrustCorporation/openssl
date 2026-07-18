@@ -2945,7 +2945,7 @@ int speed_main(int argc, char **argv)
                                 &outlen, loopargs[k].buf,
                                 lengths[testnum])) {
                             BIO_puts(bio_err,
-                                "\nFailed to to encrypt the data\n");
+                                "\nFailed to encrypt the data\n");
                             dofail();
                             exit(1);
                         }
@@ -4633,7 +4633,7 @@ static int do_multi(int multi, int size_num)
     for (n = 0; n < multi; ++n) {
         while (wait(&status) == -1)
             if (errno != EINTR) {
-                BIO_printf(bio_err, "Waitng for child failed with 0x%x\n",
+                BIO_printf(bio_err, "Waiting for child failed with 0x%x\n",
                     errno);
                 return 1;
             }

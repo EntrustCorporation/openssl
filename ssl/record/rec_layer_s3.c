@@ -150,7 +150,7 @@ static uint32_t ossl_get_max_early_data(SSL_CONNECTION *s)
 static int ossl_early_data_count_ok(SSL_CONNECTION *s, size_t length,
     size_t overhead, int send)
 {
-    uint32_t max_early_data;
+    uint64_t max_early_data;
 
     max_early_data = ossl_get_max_early_data(s);
 
@@ -161,7 +161,7 @@ static int ossl_early_data_count_ok(SSL_CONNECTION *s, size_t length,
     }
 
     /* If we are dealing with ciphertext we need to allow for the overhead */
-    max_early_data += (uint32_t)overhead;
+    max_early_data += overhead;
 
     if (s->early_data_count + length > max_early_data) {
         SSLfatal(s, send ? SSL_AD_INTERNAL_ERROR : SSL_AD_UNEXPECTED_MESSAGE,
@@ -834,20 +834,6 @@ start:
      * were actually expecting a CCS).
      */
 
-    /*
-     * Lets just double check that we've not got an SSLv2 record
-     */
-    if (rr->version == SSL2_VERSION) {
-        /*
-         * Should never happen. ssl3_get_record() should only give us an SSLv2
-         * record back if this is the first packet and we are looking for an
-         * initial ClientHello. Therefore |type| should always be equal to
-         * |rr->type|. If not then something has gone horribly wrong
-         */
-        SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
-        return -1;
-    }
-
     if (ssl->method->version == TLS_ANY_VERSION
         && (s->server || rr->type != SSL3_RT_ALERT)) {
         /*
@@ -856,7 +842,14 @@ start:
          * with. We shouldn't be receiving anything other than a ClientHello
          * if we are a server.
          */
-        s->version = rr->version;
+        int min_version, max_version;
+
+        if (ssl_get_min_max_version(s, &min_version, &max_version, NULL) != 0) {
+            SSLfatal(s, SSL_AD_HANDSHAKE_FAILURE, ERR_R_INTERNAL_ERROR);
+            return -1;
+        }
+
+        s->version = min_version;
         SSLfatal(s, SSL_AD_UNEXPECTED_MESSAGE, SSL_R_UNEXPECTED_MESSAGE);
         return -1;
     }
@@ -1442,7 +1435,7 @@ int ssl_set_new_record_layer(SSL_CONNECTION *s, int version,
             secret, secretlen, key, keylen, iv,
             ivlen, mackey, mackeylen, ciph, taglen,
             mactype, md, compm, kdfdigest, prev,
-            thisbio, next, NULL, NULL, settings,
+            thisbio, next, settings,
             options, rlayer_dispatch_tmp, s,
             s->rlayer.rlarg, &newrl);
         BIO_free(prev);

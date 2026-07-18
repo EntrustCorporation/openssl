@@ -10,7 +10,6 @@
 #include "internal/sockets.h"
 #include <openssl/bio.h>
 #include <openssl/err.h>
-#include "internal/thread_once.h"
 #include "internal/rio_notifier.h"
 
 #if !defined(OPENSSL_SYS_WINDOWS) || RIO_NOTIFIER_METHOD == RIO_NOTIFIER_METHOD_SOCKETPAIR
@@ -30,9 +29,12 @@ static int set_cloexec(int fd)
 
 #if defined(OPENSSL_SYS_WINDOWS)
 
-static CRYPTO_ONCE ensure_wsa_startup_once = CRYPTO_ONCE_STATIC_INIT;
+static void ossl_wsa_cleanup(void)
+{
+    WSACleanup();
+}
 
-DEFINE_RUN_ONCE_STATIC(do_wsa_startup)
+static int do_wsa_startup(void)
 {
     WORD versionreq = 0x0202; /* Version 2.2 */
     WSADATA wsadata;
@@ -45,7 +47,12 @@ DEFINE_RUN_ONCE_STATIC(do_wsa_startup)
 
 static ossl_inline int ensure_wsa_startup(void)
 {
-    return RUN_ONCE(&ensure_wsa_startup_once, do_wsa_startup);
+    return do_wsa_startup();
+}
+
+static void wsa_done(void)
+{
+    ossl_wsa_cleanup();
 }
 
 #endif
@@ -332,6 +339,9 @@ void ossl_rio_notifier_cleanup(RIO_NOTIFIER *nfy)
     BIO_closesocket(nfy->wfd);
     BIO_closesocket(nfy->rfd);
     nfy->rfd = nfy->wfd = -1;
+#if defined(OPENSSL_SYS_WINDOWS)
+    wsa_done();
+#endif
 }
 
 int ossl_rio_notifier_signal(RIO_NOTIFIER *nfy)

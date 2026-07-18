@@ -227,7 +227,7 @@ int ossl_rsa_fromdata(RSA *rsa, const OSSL_PARAM params[], int include_private)
 
     if (!ossl_rsa_check_factors(rsa)) {
         ERR_raise_data(ERR_LIB_RSA, RSA_R_INVALID_KEYPAIR,
-            "RSA factors/exponents are too big for for n-modulus\n");
+            "RSA factors/exponents are too big for n-modulus\n");
         goto err;
     }
 
@@ -532,7 +532,8 @@ RSA *ossl_rsa_dup(const RSA *rsa, int selection)
     }
 
     if (rsa->pss != NULL) {
-        dupkey->pss = RSA_PSS_PARAMS_dup(rsa->pss);
+        if ((dupkey->pss = RSA_PSS_PARAMS_dup(rsa->pss)) == NULL)
+            goto err;
         if (rsa->pss->maskGenAlgorithm != NULL
             && dupkey->pss->maskGenAlgorithm == NULL) {
             dupkey->pss->maskHash = ossl_x509_algor_mgf1_decode(rsa->pss->maskGenAlgorithm);

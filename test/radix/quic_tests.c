@@ -596,6 +596,14 @@ DEF_FUNC(check_flood_stats)
     path_challenge_count = ossl_quic_channel_get_path_challenge_count(ch);
     path_response_count = ossl_quic_channel_get_path_response_count(ch);
 
+    /*
+     * The flood is delivered over a real socket and processed by the
+     * connection's assist thread asynchronously, so give it a chance to
+     * catch up rather than failing on the first observation.
+     */
+    if (path_challenge_count < 16 || path_response_count < 1)
+        F_SPIN_AGAIN();
+
     if (!TEST_uint64_t_eq(path_challenge_count, 16))
         goto err;
     if (!TEST_uint64_t_eq(path_response_count, 1))
@@ -757,6 +765,702 @@ DEF_SCRIPT(check_ctx_cbks, "Check new_pending and client_hello callbacks")
     OP_FUNC(check_pending);
 }
 
+DEF_FUNC(check_stream_reset_5)
+{
+    int ok = 0;
+    SSL *ssl;
+    uint64_t aec = 0;
+    int state;
+
+    REQUIRE_SSL(ssl);
+
+    state = SSL_get_stream_read_state(ssl);
+    if (state != SSL_STREAM_STATE_RESET_REMOTE)
+        F_SPIN_AGAIN();
+
+    if (!TEST_true(SSL_get_stream_read_error_code(ssl, &aec)))
+        goto err;
+
+    if (!TEST_uint64_t_eq(aec, 42))
+        goto err;
+
+    ok = 1;
+err:
+    return ok;
+}
+
+/*
+ * script_5 - script_106 are place holders for tests we
+ * currently keep in test/quic_multistream_test.c.
+ * We need to move those here so we can get rid off
+ * QUIC T-server mock-up.
+ *
+ * there should be one PR for each script being moved here,
+ * to make reviewer's life easier. Once all scripts will be
+ * moved we can find better names for script_5, ..., script_106.
+ *
+ * The scaffolding here hopes to avoid conflicts in 'scripts'
+ * array below when more PRs will be in flight.
+ */
+
+/* 5. Test stream reset functionality */
+DEF_SCRIPT(script_5, "Test stream reset functionality")
+{
+    OP_SIMPLE_PAIR_CONN_ND();
+
+    OP_NEW_STREAM(C, Ca, 0 /* bidirectional */);
+    OP_NEW_STREAM(C, Cb, 0 /* bidirectional */);
+
+    OP_WRITE(Ca, "apple", 5);
+    OP_STREAM_RESET(Ca, 42);
+
+    OP_WRITE(Cb, "strawberry", 10);
+
+    OP_ACCEPT_CONN_WAIT_ND(L, S, 0);
+    OP_ACCEPT_STREAM_WAIT(S, Sa, 0); /* first stream = Ca */
+    OP_ACCEPT_STREAM_WAIT(S, Sb, 0); /* second stream = Cb */
+
+    /* Reset disrupts read of already-sent data */
+    OP_SELECT_SSL(0, Sa);
+    OP_FUNC(check_stream_reset_5);
+
+    OP_READ_EXPECT(Sb, "strawberry", 10);
+}
+
+DEF_FUNC(check_stream_stopped_6)
+{
+    int ok = 0;
+    SSL *ssl;
+
+    REQUIRE_SSL(ssl);
+
+    if (SSL_get_stream_write_state(ssl) != SSL_STREAM_STATE_RESET_LOCAL)
+        F_SPIN_AGAIN();
+
+    ok = 1;
+err:
+    return ok;
+}
+
+/* 6. Test STOP_SENDING functionality */
+DEF_SCRIPT(script_6, "Test STOP_SENDING functionality")
+{
+    OP_SIMPLE_PAIR_CONN_ND();
+    OP_ACCEPT_CONN_WAIT_ND(L, S, 0);
+
+    OP_NEW_STREAM(S, Sa, 0 /* bidirectional */);
+    OP_WRITE(Sa, "apple", 5);
+
+    OP_ACCEPT_STREAM_WAIT(C, Ca, 0);
+    OP_UNBIND(Ca);
+    OP_ACCEPT_STREAM_NONE(C, 0);
+
+    OP_SELECT_SSL(0, Sa);
+    OP_FUNC(check_stream_stopped_6);
+}
+
+/* 7. Unidirectional default stream mode test (client sends first) */
+DEF_SCRIPT(script_7, "Unidirectional default stream mode (client sends first)")
+{
+    OP_SIMPLE_PAIR_CONN();
+    OP_SET_DEFAULT_STREAM_MODE(C, SSL_DEFAULT_STREAM_MODE_AUTO_UNI);
+    OP_WRITE(C, "apple", 5);
+
+    OP_ACCEPT_CONN_WAIT(L, S, 0);
+    OP_READ_EXPECT(S, "apple", 5);
+    OP_WRITE_FAIL(S);
+}
+
+/* 8. Unidirectional default stream mode test (server sends first) */
+DEF_SCRIPT(script_8, "Unidirectional default stream mode (server sends first)")
+{
+    OP_SIMPLE_PAIR_CONN();
+    OP_SET_DEFAULT_STREAM_MODE(C, SSL_DEFAULT_STREAM_MODE_AUTO_UNI);
+
+    OP_ACCEPT_CONN_WAIT(L, S, 0);
+    OP_NEW_STREAM(S, Sa, SSL_STREAM_FLAG_UNI);
+    OP_WRITE(Sa, "apple", 5);
+
+    OP_READ_EXPECT(C, "apple", 5);
+    OP_WRITE_FAIL(C);
+}
+
+/* 9. Unidirectional default stream mode test (server sends first on bidi) */
+DEF_SCRIPT(script_9, "Unidirectional default stream mode (server sends bidi first)")
+{
+    OP_SIMPLE_PAIR_CONN();
+    OP_SET_DEFAULT_STREAM_MODE(C, SSL_DEFAULT_STREAM_MODE_AUTO_UNI);
+
+    OP_ACCEPT_CONN_WAIT(L, S, 0);
+    OP_NEW_STREAM(S, Sa, 0 /* bidirectional */);
+    OP_WRITE(Sa, "apple", 5);
+
+    OP_READ_EXPECT(C, "apple", 5);
+    OP_WRITE(C, "orange", 6);
+    OP_READ_EXPECT(Sa, "orange", 6);
+}
+
+/* 10. Shutdown */
+DEF_SCRIPT(script_10, "Shutdown test")
+{
+    OP_SIMPLE_PAIR_CONN();
+
+    OP_WRITE(C, "apple", 5);
+    OP_ACCEPT_CONN_WAIT(L, S, 0);
+    OP_READ_EXPECT(S, "apple", 5);
+
+    OP_SHUTDOWN_WAIT(C, 0, 0, NULL);
+    OP_EXPECT_CONN_CLOSE_INFO(C, 0, 1, 0);
+    OP_EXPECT_CONN_CLOSE_INFO(S, 0, 1, 1);
+}
+
+/* 11. Many threads accepted on the same client connection */
+DEF_SCRIPT(script_11_child_0,
+    "child: accept stream from C, read, sleep, expect FIN")
+{
+    OP_ACCEPT_STREAM_WAIT(C, C0, OP_F_REPLACE_STREAM /* bidirectional */);
+    OP_READ_EXPECT_B(C0, "foo");
+    OP_SLEEP(10);
+    OP_EXPECT_FIN(C0);
+}
+
+DEF_SCRIPT(script_11_child_1,
+    "child: accept stream from C, read, sleep, expect FIN")
+{
+    OP_ACCEPT_STREAM_WAIT(C, C1, OP_F_REPLACE_STREAM /* bidirectional */);
+    OP_READ_EXPECT_B(C1, "foo");
+    OP_SLEEP(10);
+    OP_EXPECT_FIN(C1);
+}
+
+DEF_SCRIPT(script_11_child_2,
+    "child: accept stream from C, read, sleep, expect FIN")
+{
+    OP_ACCEPT_STREAM_WAIT(C, C2, OP_F_REPLACE_STREAM /* bidirectional */);
+    OP_READ_EXPECT_B(C2, "foo");
+    OP_SLEEP(10);
+    OP_EXPECT_FIN(C2);
+}
+
+DEF_SCRIPT(script_11_child_3,
+    "child: accept stream from C, read, sleep, expect FIN")
+{
+    OP_ACCEPT_STREAM_WAIT(C, C3, OP_F_REPLACE_STREAM /* bidirectional */);
+    OP_READ_EXPECT_B(C3, "foo");
+    OP_SLEEP(10);
+    OP_EXPECT_FIN(C3);
+}
+
+DEF_SCRIPT(script_11_child_4,
+    "child: accept stream from C, read, sleep, expect FIN")
+{
+    OP_ACCEPT_STREAM_WAIT(C, C4, OP_F_REPLACE_STREAM /* bidirectional */);
+    OP_READ_EXPECT_B(C4, "foo");
+    OP_SLEEP(10);
+    OP_EXPECT_FIN(C4);
+}
+
+DEF_SCRIPT(script_11, "Many threads accepted on the same client connection")
+{
+    OP_SIMPLE_PAIR_CONN_ND();
+    OP_ACCEPT_CONN_WAIT(L, S, 0);
+
+    OP_BIND(C0);
+    OP_BIND(C1);
+    OP_BIND(C2);
+    OP_BIND(C3);
+    OP_BIND(C4);
+    OP_BIND(Sa);
+    OP_BIND(Sb);
+    OP_BIND(Sc);
+    OP_BIND(Sd);
+    OP_BIND(Se);
+
+    OP_SPAWN_THREAD(script_11_child_0);
+    OP_SPAWN_THREAD(script_11_child_1);
+    OP_SPAWN_THREAD(script_11_child_2);
+    OP_SPAWN_THREAD(script_11_child_3);
+    OP_SPAWN_THREAD(script_11_child_4);
+
+    OP_NEW_STREAM(S, Sa, OP_F_REPLACE_STREAM /* bidirectional */);
+    OP_WRITE_B(Sa, "foo");
+    OP_CONCLUDE(Sa);
+
+    OP_NEW_STREAM(S, Sb, OP_F_REPLACE_STREAM /* bidirectional */);
+    OP_WRITE_B(Sb, "foo");
+    OP_CONCLUDE(Sb);
+
+    OP_NEW_STREAM(S, Sc, OP_F_REPLACE_STREAM /* bidirectional */);
+    OP_WRITE_B(Sc, "foo");
+    OP_CONCLUDE(Sc);
+
+    OP_NEW_STREAM(S, Sd, OP_F_REPLACE_STREAM /* bidirectional */);
+    OP_WRITE_B(Sd, "foo");
+    OP_CONCLUDE(Sd);
+
+    OP_NEW_STREAM(S, Se, OP_F_REPLACE_STREAM /* bidirectional */);
+    OP_WRITE_B(Se, "foo");
+    OP_CONCLUDE(Se);
+    OP_SLEEP(10);
+}
+
+/* 12. Many threads initiated on the same client connection */
+DEF_SCRIPT(script_12_child_0,
+    "child: create stream on C, write, conclude")
+{
+    OP_NEW_STREAM(C, C0, OP_F_REPLACE_STREAM /* bidirectional */);
+    OP_WRITE_B(C0, "foo");
+    OP_CONCLUDE(C0);
+}
+
+DEF_SCRIPT(script_12_child_1,
+    "child: create stream on C, write, conclude")
+{
+    OP_NEW_STREAM(C, C1, OP_F_REPLACE_STREAM /* bidirectional */);
+    OP_WRITE_B(C1, "foo");
+    OP_CONCLUDE(C1);
+}
+
+DEF_SCRIPT(script_12_child_2,
+    "child: create stream on C, write, conclude")
+{
+    OP_NEW_STREAM(C, C2, OP_F_REPLACE_STREAM /* bidirectional */);
+    OP_WRITE_B(C2, "foo");
+    OP_CONCLUDE(C2);
+}
+
+DEF_SCRIPT(script_12_child_3,
+    "child: create stream on C, write, conclude")
+{
+    OP_NEW_STREAM(C, C3, OP_F_REPLACE_STREAM /* bidirectional */);
+    OP_WRITE_B(C3, "foo");
+    OP_CONCLUDE(C3);
+}
+
+DEF_SCRIPT(script_12_child_4,
+    "child: create stream on C, write, conclude")
+{
+    OP_NEW_STREAM(C, C4, OP_F_REPLACE_STREAM /* bidirectional */);
+    OP_WRITE_B(C4, "foo");
+    OP_CONCLUDE(C4);
+}
+
+DEF_SCRIPT(script_12, "Many threads initiated on the same client connection")
+{
+    OP_SIMPLE_PAIR_CONN_ND();
+    OP_ACCEPT_CONN_WAIT_ND(L, S, 0);
+
+    OP_BIND(C0);
+    OP_BIND(C1);
+    OP_BIND(C2);
+    OP_BIND(C3);
+    OP_BIND(C4);
+    OP_BIND(Sa);
+    OP_BIND(Sb);
+    OP_BIND(Sc);
+    OP_BIND(Sd);
+    OP_BIND(Se);
+
+    OP_SPAWN_THREAD(script_12_child_0);
+    OP_SPAWN_THREAD(script_12_child_1);
+    OP_SPAWN_THREAD(script_12_child_2);
+    OP_SPAWN_THREAD(script_12_child_3);
+    OP_SPAWN_THREAD(script_12_child_4);
+
+    OP_ACCEPT_STREAM_WAIT(S, Sa, OP_F_REPLACE_STREAM);
+    OP_READ_EXPECT_B(Sa, "foo");
+    OP_EXPECT_FIN(Sa);
+    OP_ACCEPT_STREAM_WAIT(S, Sb, OP_F_REPLACE_STREAM);
+    OP_READ_EXPECT_B(Sb, "foo");
+    OP_EXPECT_FIN(Sb);
+    OP_ACCEPT_STREAM_WAIT(S, Sc, OP_F_REPLACE_STREAM);
+    OP_READ_EXPECT_B(Sc, "foo");
+    OP_EXPECT_FIN(Sc);
+    OP_ACCEPT_STREAM_WAIT(S, Sd, OP_F_REPLACE_STREAM);
+    OP_READ_EXPECT_B(Sd, "foo");
+    OP_EXPECT_FIN(Sd);
+    OP_ACCEPT_STREAM_WAIT(S, Se, OP_F_REPLACE_STREAM);
+    OP_READ_EXPECT_B(Se, "foo");
+    OP_EXPECT_FIN(Se);
+    OP_SLEEP(10);
+}
+
+DEF_SCRIPT(script_13, "place holder for multistrem script_13")
+{
+}
+
+DEF_SCRIPT(script_14, "place holder for multistrem script_14")
+{
+}
+
+DEF_SCRIPT(script_15, "place holder for multistrem script_15")
+{
+}
+
+DEF_SCRIPT(script_16, "place holder for multistrem script_16")
+{
+}
+
+DEF_SCRIPT(script_17, "place holder for multistrem script_17")
+{
+}
+
+DEF_SCRIPT(script_18, "place holder for multistrem script_18")
+{
+}
+
+DEF_SCRIPT(script_19, "place holder for multistrem script_19")
+{
+}
+
+DEF_SCRIPT(script_20, "place holder for multistrem script_20")
+{
+}
+
+DEF_SCRIPT(script_21, "place holder for multistrem script_21")
+{
+}
+
+DEF_SCRIPT(script_22, "place holder for multistrem script_22")
+{
+}
+
+DEF_SCRIPT(script_23, "place holder for multistrem script_23")
+{
+}
+
+DEF_SCRIPT(script_24, "place holder for multistrem script_24")
+{
+}
+
+DEF_SCRIPT(script_25, "place holder for multistrem script_25")
+{
+}
+
+DEF_SCRIPT(script_26, "place holder for multistrem script_26")
+{
+}
+
+DEF_SCRIPT(script_27, "place holder for multistrem script_27")
+{
+}
+
+DEF_SCRIPT(script_28, "place holder for multistrem script_28")
+{
+}
+
+DEF_SCRIPT(script_29, "place holder for multistrem script_29")
+{
+}
+
+DEF_SCRIPT(script_30, "place holder for multistrem script_30")
+{
+}
+
+DEF_SCRIPT(script_31, "place holder for multistrem script_31")
+{
+}
+
+DEF_SCRIPT(script_32, "place holder for multistrem script_32")
+{
+}
+
+DEF_SCRIPT(script_33, "place holder for multistrem script_33")
+{
+}
+
+DEF_SCRIPT(script_34, "place holder for multistrem script_34")
+{
+}
+
+DEF_SCRIPT(script_35, "place holder for multistrem script_35")
+{
+}
+
+DEF_SCRIPT(script_36, "place holder for multistrem script_36")
+{
+}
+
+DEF_SCRIPT(script_37, "place holder for multistrem script_37")
+{
+}
+
+DEF_SCRIPT(script_38, "place holder for multistrem script_38")
+{
+}
+
+DEF_SCRIPT(script_39, "place holder for multistrem script_39")
+{
+}
+
+DEF_SCRIPT(script_40, "place holder for multistrem script_40")
+{
+}
+
+DEF_SCRIPT(script_41, "place holder for multistrem script_41")
+{
+}
+
+DEF_SCRIPT(script_42, "place holder for multistrem script_42")
+{
+}
+
+DEF_SCRIPT(script_43, "place holder for multistrem script_43")
+{
+}
+
+DEF_SCRIPT(script_44, "place holder for multistrem script_44")
+{
+}
+
+DEF_SCRIPT(script_45, "place holder for multistrem script_45")
+{
+}
+
+DEF_SCRIPT(script_46, "place holder for multistrem script_46")
+{
+}
+
+DEF_SCRIPT(script_47, "place holder for multistrem script_47")
+{
+}
+
+DEF_SCRIPT(script_48, "place holder for multistrem script_48")
+{
+}
+
+DEF_SCRIPT(script_49, "place holder for multistrem script_49")
+{
+}
+
+DEF_SCRIPT(script_50, "place holder for multistrem script_50")
+{
+}
+
+DEF_SCRIPT(script_51, "place holder for multistrem script_51")
+{
+}
+
+DEF_SCRIPT(script_52, "place holder for multistrem script_52")
+{
+}
+
+DEF_SCRIPT(script_53, "place holder for multistrem script_53")
+{
+}
+
+DEF_SCRIPT(script_54, "place holder for multistrem script_54")
+{
+}
+
+DEF_SCRIPT(script_55, "place holder for multistrem script_55")
+{
+}
+
+DEF_SCRIPT(script_56, "place holder for multistrem script_56")
+{
+}
+
+DEF_SCRIPT(script_57, "place holder for multistrem script_57")
+{
+}
+
+DEF_SCRIPT(script_58, "place holder for multistrem script_58")
+{
+}
+
+DEF_SCRIPT(script_59, "place holder for multistrem script_59")
+{
+}
+
+DEF_SCRIPT(script_60, "place holder for multistrem script_60")
+{
+}
+
+DEF_SCRIPT(script_61, "place holder for multistrem script_61")
+{
+}
+
+DEF_SCRIPT(script_62, "place holder for multistrem script_62")
+{
+}
+
+DEF_SCRIPT(script_63, "place holder for multistrem script_63")
+{
+}
+
+DEF_SCRIPT(script_64, "place holder for multistrem script_64")
+{
+}
+
+DEF_SCRIPT(script_65, "place holder for multistrem script_65")
+{
+}
+
+DEF_SCRIPT(script_66, "place holder for multistrem script_66")
+{
+}
+
+DEF_SCRIPT(script_67, "place holder for multistrem script_67")
+{
+}
+
+DEF_SCRIPT(script_68, "place holder for multistrem script_68")
+{
+}
+
+DEF_SCRIPT(script_69, "place holder for multistrem script_69")
+{
+}
+
+DEF_SCRIPT(script_70, "place holder for multistrem script_70")
+{
+}
+
+DEF_SCRIPT(script_71, "place holder for multistrem script_71")
+{
+}
+
+DEF_SCRIPT(script_72, "place holder for multistrem script_72")
+{
+}
+
+DEF_SCRIPT(script_73, "place holder for multistrem script_73")
+{
+}
+
+DEF_SCRIPT(script_74, "place holder for multistrem script_74")
+{
+}
+
+DEF_SCRIPT(script_75, "place holder for multistrem script_75")
+{
+}
+
+DEF_SCRIPT(script_76, "place holder for multistrem script_76")
+{
+}
+
+DEF_SCRIPT(script_77, "place holder for multistrem script_77")
+{
+}
+
+DEF_SCRIPT(script_78, "place holder for multistrem script_78")
+{
+}
+
+DEF_SCRIPT(script_79, "place holder for multistrem script_79")
+{
+}
+
+DEF_SCRIPT(script_80, "place holder for multistrem script_80")
+{
+}
+
+DEF_SCRIPT(script_81, "place holder for multistrem script_81")
+{
+}
+
+DEF_SCRIPT(script_82, "place holder for multistrem script_82")
+{
+}
+
+DEF_SCRIPT(script_83, "place holder for multistrem script_83")
+{
+}
+
+DEF_SCRIPT(script_84, "place holder for multistrem script_84")
+{
+}
+
+DEF_SCRIPT(script_85, "place holder for multistrem script_85")
+{
+}
+
+DEF_SCRIPT(script_86, "place holder for multistrem script_86")
+{
+}
+
+DEF_SCRIPT(script_87, "place holder for multistrem script_87")
+{
+}
+
+DEF_SCRIPT(script_88, "place holder for multistrem script_88")
+{
+}
+
+DEF_SCRIPT(script_89, "place holder for multistrem script_89")
+{
+}
+
+DEF_SCRIPT(script_90, "place holder for multistrem script_90")
+{
+}
+
+DEF_SCRIPT(script_91, "place holder for multistrem script_91")
+{
+}
+
+DEF_SCRIPT(script_92, "place holder for multistrem script_92")
+{
+}
+
+DEF_SCRIPT(script_93, "place holder for multistrem script_93")
+{
+}
+
+DEF_SCRIPT(script_94, "place holder for multistrem script_94")
+{
+}
+
+DEF_SCRIPT(script_95, "place holder for multistrem script_95")
+{
+}
+
+DEF_SCRIPT(script_96, "place holder for multistrem script_96")
+{
+}
+
+DEF_SCRIPT(script_97, "place holder for multistrem script_97")
+{
+}
+
+DEF_SCRIPT(script_98, "place holder for multistrem script_98")
+{
+}
+
+DEF_SCRIPT(script_99, "place holder for multistrem script_99")
+{
+}
+
+DEF_SCRIPT(script_100, "place holder for multistrem script_100")
+{
+}
+
+DEF_SCRIPT(script_101, "place holder for multistrem script_101")
+{
+}
+
+DEF_SCRIPT(script_102, "place holder for multistrem script_102")
+{
+}
+
+DEF_SCRIPT(script_103, "place holder for multistrem script_103")
+{
+}
+
+DEF_SCRIPT(script_104, "place holder for multistrem script_104")
+{
+}
+
+DEF_SCRIPT(script_105, "place holder for multistrem script_105")
+{
+}
+
+DEF_SCRIPT(script_106, "place holder for multistrem script_106")
+{
+}
+
 /*
  * List of Test Scripts
  * ============================================================================
@@ -770,4 +1474,106 @@ static SCRIPT_INFO *const scripts[] = {
     USE(check_cwm),
     USE(check_pc_flood),
     USE(check_ctx_cbks),
+    USE(script_5),
+    USE(script_6),
+    USE(script_7),
+    USE(script_8),
+    USE(script_9),
+    USE(script_10),
+    USE(script_11),
+    USE(script_12),
+    USE(script_13),
+    USE(script_14),
+    USE(script_15),
+    USE(script_16),
+    USE(script_17),
+    USE(script_18),
+    USE(script_19),
+    USE(script_20),
+    USE(script_21),
+    USE(script_22),
+    USE(script_23),
+    USE(script_24),
+    USE(script_25),
+    USE(script_26),
+    USE(script_27),
+    USE(script_28),
+    USE(script_29),
+    USE(script_30),
+    USE(script_31),
+    USE(script_32),
+    USE(script_33),
+    USE(script_34),
+    USE(script_35),
+    USE(script_36),
+    USE(script_37),
+    USE(script_38),
+    USE(script_39),
+    USE(script_40),
+    USE(script_41),
+    USE(script_42),
+    USE(script_43),
+    USE(script_44),
+    USE(script_45),
+    USE(script_46),
+    USE(script_47),
+    USE(script_48),
+    USE(script_49),
+    USE(script_50),
+    USE(script_51),
+    USE(script_52),
+    USE(script_53),
+    USE(script_54),
+    USE(script_55),
+    USE(script_56),
+    USE(script_57),
+    USE(script_58),
+    USE(script_59),
+    USE(script_60),
+    USE(script_61),
+    USE(script_62),
+    USE(script_63),
+    USE(script_64),
+    USE(script_65),
+    USE(script_66),
+    USE(script_67),
+    USE(script_68),
+    USE(script_69),
+    USE(script_70),
+    USE(script_71),
+    USE(script_72),
+    USE(script_73),
+    USE(script_74),
+    USE(script_75),
+    USE(script_76),
+    USE(script_77),
+    USE(script_78),
+    USE(script_79),
+    USE(script_80),
+    USE(script_81),
+    USE(script_82),
+    USE(script_83),
+    USE(script_84),
+    USE(script_85),
+    USE(script_86),
+    USE(script_87),
+    USE(script_88),
+    USE(script_89),
+    USE(script_90),
+    USE(script_91),
+    USE(script_92),
+    USE(script_93),
+    USE(script_94),
+    USE(script_95),
+    USE(script_96),
+    USE(script_97),
+    USE(script_98),
+    USE(script_99),
+    USE(script_100),
+    USE(script_101),
+    USE(script_102),
+    USE(script_103),
+    USE(script_104),
+    USE(script_105),
+    USE(script_106),
 };
