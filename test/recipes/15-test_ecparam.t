@@ -30,7 +30,7 @@ if (disabled("sm2")) {
     @valid = grep { !/sm2-.*\.pem/} @valid;
 }
 
-plan tests => 14;
+plan tests => 16;
 
 sub checkload {
     my $files = shift; # List of files
@@ -197,6 +197,64 @@ subtest "Check loading of fips and non-fips params" => sub {
        "Generating key for named non-fips curve with non-FIPS property query");
 
     $ENV{OPENSSL_CONF} = $defaultconf;
+};
+
+subtest "Check ecparam -param_enc converts between named and explicit" => sub {
+    plan tests => 3;
+
+    my $named = data_file('valid', 'secp384r1-named.pem');
+    my $explicit = data_file('valid', 'secp384r1-explicit.pem');
+
+    # The encodings are canonical, so re-encoding a named curve as explicit
+    # (and vice versa) must reproduce the matching reference file byte for byte.
+    my $to_explicit = 'param-explicit.tst';
+    ok(run(app(['openssl', 'ecparam', '-in', $named, '-param_enc', 'explicit',
+                '-out', $to_explicit]))
+       && !compare($to_explicit, $explicit),
+       "named_curve params re-encoded as explicit match the reference file");
+
+    my $to_named = 'param-named.tst';
+    ok(run(app(['openssl', 'ecparam', '-in', $explicit, '-param_enc',
+                'named_curve', '-out', $to_named]))
+       && !compare($to_named, $named),
+       "explicit params re-encoded as named_curve match the reference file");
+
+    ok(!run(app(['openssl', 'ecparam', '-in', $named, '-noout',
+                 '-param_enc', 'bogus'])),
+       "an invalid parameter encoding is rejected");
+};
+
+subtest "Check ecparam -text prints the parameters in text form" => sub {
+    plan tests => 6;
+
+    my $named = data_file('valid', 'secp384r1-named.pem');
+    my $explicit = data_file('valid', 'secp384r1-explicit.pem');
+
+    # Named parameters print the curve identification.
+    my @named = run(app(['openssl', 'ecparam', '-text', '-noout', '-in', $named],
+                        stderr => undef),
+                    capture => 1);
+    chomp @named;
+    ok(grep(/^EC-Parameters: \(384 bit field, 192 bit security level\)$/, @named),
+       "named parameters print the EC-Parameters header");
+    ok(grep(/^ASN1 OID: secp384r1$/, @named),
+       "named parameters print the expected curve OID");
+    ok(grep(/^NIST CURVE: P-384$/, @named),
+       "named parameters print the expected NIST curve name");
+
+    # Explicit parameters print the field parameters instead of the curve name.
+    my @explicit = run(app(['openssl', 'ecparam', '-text', '-noout',
+                            '-in', $explicit],
+                           stderr => undef),
+                       capture => 1);
+    chomp @explicit;
+    ok(grep(/^EC-Parameters: \(384 bit field, 192 bit security level\)$/, @explicit),
+       "explicit parameters print the EC-Parameters header");
+    ok(grep(/^Field Type: prime-field$/, @explicit)
+       && grep(/^Cofactor:/, @explicit),
+       "explicit parameters print the field parameters");
+    ok(!grep(/^ASN1 OID:/, @explicit),
+       "explicit parameters do not print a curve OID");
 };
 
 ok(run(app(['openssl', 'ecparam', '-list_curves'])), "Test -list_curves");

@@ -88,12 +88,14 @@ jobs:
       run: git submodule update --init --depth 1 fuzz/corpora
     - name: localegen
       run: sudo locale-gen tr_TR.UTF-8
+    - name: cmocka
+      run: sudo apt-get -y install libcmocka-dev
     - name: fipsvendor
       # Make one fips build use a customized FIPS vendor
       run: echo "FIPS_VENDOR=CI" >> VERSION.dat
     - name: config
       # enable-quic is on by default, but we leave it here to check we're testing the explicit enable somewhere
-      run: CC=gcc ./config --strict-warnings --banner=Configured enable-demos enable-h3demo enable-ec_explicit_curves enable-sslkeylog enable-fips enable-quic enable-lms && perl configdata.pm --dump
+      run: CC=gcc ./config --strict-warnings --banner=Configured enable-demos enable-h3demo enable-ec_explicit_curves enable-sslkeylog enable-fips enable-quic enable-lms enable-unit-tests && perl configdata.pm --dump
     - name: make
       run: make -s -j4
     - name: get cpu info
@@ -460,6 +462,40 @@ jobs:
         path: artifacts.tar.gz
         if-no-files-found: ignore
 
+  fuzz_tests_mfail:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        persist-credentials: false
+    - name: checkout fuzz/corpora submodule
+      run: git submodule update --init --depth 1 fuzz/corpora
+    - name: Adjust ASLR for sanitizer
+      run: sudo sysctl -w vm.mmap_rnd_bits=28
+    - name: config
+      run: |
+        ./config --strict-warnings --banner=Configured --debug \
+          -DPEDANTIC -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION \
+          enable-asan enable-ec_explicit_curves enable-ubsan \
+          enable-rc5 enable-md2 enable-ec_nistp_64_gcc_128 \
+          enable-weak-ssl-ciphers enable-nextprotoneg
+        perl configdata.pm --dump
+    - name: make
+      run: make -s -j4
+    - name: make test (fuzz with mfail)
+      env:
+        OSSL_FUZZ_TEST_BUDGET: 1200
+        OSSL_FUZZ_TEST_JOBS: 4
+      run: .github/workflows/make-test OPENSSL_TEST_RAND_ORDER=0 TESTS="test_fuzz*"
+    - name: save artifacts
+      if: success() || failure()
+      uses: actions/upload-artifact@v5
+      with:
+        name: "ci@fuzz_tests_mfail"
+        path: artifacts.tar.gz
+        if-no-files-found: ignore
+
   memory_sanitizer:
     runs-on: ubuntu-latest
     steps:
@@ -729,10 +765,6 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get -yq install bison gettext keyutils ldap-utils libldap2-dev libkeyutils-dev python3 python3-paste python3-pyrad slapd tcsh python3-virtualenv virtualenv python3-kdcproxy gdb libtls-dev wget gpg
-    - name: install cpanm and Test2::V0 for gost_engine testing
-      uses: perl-actions/install-with-cpanm@10d60f00b4073f484fc29d45bfbe2f776397ab3d # v1.7
-      with:
-        install: Test2::V0
     - name: setup hostname workaround
       run: sudo hostname localhost
     - name: config
@@ -746,8 +778,9 @@ jobs:
       run: |
         cat /proc/cpuinfo
         ./util/opensslwrap.sh version -c
-    - name: test external gost-engine
-      run: make test TESTS="test_external_gost_engine"
+    - name: test failure when selecting non-existing test case
+      run: |
+        ! make test TESTS="test_external_gost_engine"
     - name: test external krb5
       run: make test TESTS="test_external_krb5"
     - name: test external tlsfuzzer

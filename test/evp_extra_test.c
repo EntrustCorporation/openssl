@@ -2323,20 +2323,83 @@ out:
 }
 
 #ifndef OPENSSL_NO_POLY1305
-/* Test that EVP_MAC_final fails for Poly1305 when no key was set */
+/* Test Poly1305 no-key failures and staged key initialization */
 static int test_evp_mac_poly1305_no_key(void)
 {
     int ret = 0;
     EVP_MAC *mac = NULL;
     EVP_MAC_CTX *ctx = NULL;
+    /* RFC 7539 Poly1305 test vector. */
+    static const unsigned char staged_data[] = "Cryptographic Forum Research Group";
+    static const unsigned char expected[16] = {
+        0xa8, 0x06, 0x1d, 0xc1, 0x30, 0x51, 0x36, 0xc6,
+        0xc2, 0x2b, 0x8b, 0xaf, 0x0c, 0x01, 0x27, 0xa9
+    };
+    unsigned char no_key_data[16] = { 0 };
+    unsigned char key[32] = {
+        0x85, 0xd6, 0xbe, 0x78, 0x57, 0x55, 0x6d, 0x33,
+        0x7f, 0x44, 0x52, 0xfe, 0x42, 0xd5, 0x06, 0xa8,
+        0x01, 0x03, 0x80, 0x8a, 0xfb, 0x0d, 0xb2, 0xfd,
+        0x4a, 0xbf, 0xf6, 0xaf, 0x41, 0x49, 0xf5, 0x1b
+    };
     unsigned char out[16];
+    OSSL_PARAM key_params[2];
+    OSSL_PARAM null_key_params[2];
     size_t outl = 0;
+
+    key_params[0] = OSSL_PARAM_construct_octet_string(OSSL_MAC_PARAM_KEY,
+        key, sizeof(key));
+    key_params[1] = OSSL_PARAM_construct_end();
+    null_key_params[0] = OSSL_PARAM_construct_octet_string(OSSL_MAC_PARAM_KEY,
+        NULL, sizeof(key));
+    null_key_params[1] = OSSL_PARAM_construct_end();
 
     if (!TEST_ptr(mac = EVP_MAC_fetch(testctx, "Poly1305", testpropq))
         || !TEST_ptr(ctx = EVP_MAC_CTX_new(mac))
-        || !TEST_int_eq(EVP_MAC_init(ctx, NULL, 0, NULL), 1)
-        || !TEST_int_eq(EVP_MAC_final(ctx, out, &outl, sizeof(out)), 0))
+        || !TEST_int_eq(EVP_MAC_init(ctx, NULL, 0, NULL), 1))
         goto err;
+
+    ERR_clear_error();
+    if (!TEST_int_eq(EVP_MAC_update(ctx, no_key_data, sizeof(no_key_data)), 0)
+        || !TEST_int_eq(ERR_GET_REASON(ERR_get_error()), PROV_R_NO_KEY_SET))
+        goto err;
+
+    /* The failed update must not block staged key initialization. */
+    if (!TEST_int_eq(EVP_MAC_CTX_set_params(ctx, key_params), 1)
+        || !TEST_int_eq(EVP_MAC_update(ctx, staged_data,
+                            sizeof(staged_data) - 1),
+            1)
+        || !TEST_int_eq(EVP_MAC_final(ctx, out, &outl, sizeof(out)), 1)
+        || !TEST_size_t_eq(outl, sizeof(expected))
+        || !TEST_mem_eq(out, outl, expected, sizeof(expected)))
+        goto err;
+
+    EVP_MAC_CTX_free(ctx);
+    ctx = NULL;
+
+    if (!TEST_ptr(ctx = EVP_MAC_CTX_new(mac))
+        || !TEST_int_eq(EVP_MAC_init(ctx, NULL, 0, NULL), 1))
+        goto err;
+
+    ERR_clear_error();
+    if (!TEST_int_eq(EVP_MAC_final(ctx, out, &outl, sizeof(out)), 0)
+        || !TEST_int_eq(ERR_GET_REASON(ERR_get_error()), PROV_R_NO_KEY_SET))
+        goto err;
+
+    ERR_clear_error();
+    if (!TEST_int_eq(EVP_MAC_init(ctx, NULL, 0, null_key_params), 0)
+        || !TEST_int_eq(ERR_GET_REASON(ERR_get_error()),
+            PROV_R_INVALID_KEY_LENGTH))
+        goto err;
+
+    ERR_clear_error();
+    if (!TEST_int_eq(EVP_MAC_CTX_set_params(ctx, null_key_params), 0)
+        || !TEST_int_eq(ERR_GET_REASON(ERR_get_error()),
+            PROV_R_INVALID_KEY_LENGTH))
+        goto err;
+
+    EVP_MAC_CTX_free(ctx);
+    ctx = NULL;
     ret = 1;
 err:
     EVP_MAC_CTX_free(ctx);
@@ -2411,7 +2474,7 @@ static struct ec_der_pub_keys_st {
  * Tests the range of the decoded EC char2 public point.
  * See ec_GF2m_simple_oct2point().
  */
-static int test_invalide_ec_char2_pub_range_decode(int id)
+static int test_invalid_ec_char2_pub_range_decode(int id)
 {
     int ret = 0;
     EVP_PKEY *pkey;
@@ -4440,6 +4503,139 @@ err:
     return ret;
 }
 #endif /* !OPENSSL_NO_DEPRECATED_3_0 */
+
+/* Test that DHX (X9.42) rejects a malicious peer key during the
+ * derivation phase (specifically EVP_PKEY_derive_set_peer) when the
+ * remote 'q' does not match the local domain parameters but is still
+ * consistent with the remote key share.
+ * (CVE-2026-42770)
+ */
+static int test_dhx_derive_rejects_bad_peer_q(void)
+{
+    int ret = 0;
+    EVP_PKEY *local_key = NULL, *remote_key = NULL;
+    EVP_PKEY_CTX *pctx = NULL, *derive_ctx = NULL;
+    OSSL_PARAM_BLD *bld = NULL;
+    OSSL_PARAM *params = NULL;
+
+    BIGNUM *p = NULL, *g = NULL;
+    BIGNUM *q_valid = NULL, *pub_local = NULL, *priv_local = NULL;
+    BIGNUM *q_bad = NULL, *pub_bad = NULL;
+
+    const char *hex_p = "87a8e61db4b6663cffbbd19c651959998ceef608660dd0f25d2ceed4435e3b00"
+                        "e00df8f1d61957d4faf7df4561b2aa3016c3d91134096faa3bf4296d830e9a7c"
+                        "209e0c6497517abd5a8a9d306bcf67ed91f9e6725b4758c022e0b1ef4275bf7b"
+                        "6c5bfc11d45f9088b941f54eb1e59bb8bc39a0bf12307f5c4fdb70c581b23f76"
+                        "b63acae1caa6b7902d52526735488a0ef13c6d9a51bfa4ab3ad8347796524d8e"
+                        "f6a167b5a41825d967e144e5140564251ccacb83e6b486f6b3ca3f7971506026"
+                        "c0b857f689962856ded4010abd0be621c3a3960a54e710c375f26375d7014103"
+                        "a4b54330c198af126116d2276e11715f693877fad7ef09cadb094ae91e1a1597";
+    const char *hex_g = "3FB32C9B73134D0B2E77506660EDBD484CA7B18F21EF205407F4793A1A0BA125"
+                        "10DBC15077BE463FFF4FED4AAC0BB555BE3A6C1B0C6B47B1BC3773BF7E8C6F62"
+                        "901228F8C28CBB18A55AE31341000A650196F931C77A57F2DDF463E5E9EC144B"
+                        "777DE62AAAB8A8628AC376D282D6ED3864E67982428EBC831D14348F6F2F9193"
+                        "B5045AF2767164E1DFC967C1FB3F2E55A4BD1BFFE83B9C80D052B985D182EA0A"
+                        "DB2A3B7313D3FE14C8484B1E052588B9B7D2BBD2DF016199ECD06E1557CD0915"
+                        "B3353BBB64E0EC377FD028370DF92B52C7891428CDC67EB6184B523D1DB246C3"
+                        "2F63078490F00EF8D647D148D47954515E2327CFEF98C582664B4C0F6CC41659";
+
+    const char *hex_q_valid = "8CF83642A709A097B447997640129DA299B1A47D1EB3750BA308B0FE64F5FBD3";
+    const char *hex_local_pub = "796e15431470ac86fa8a78b8bcdd1f3589dbf15ffe0e0a7a41dd8640887f3cc3"
+                                "f0439e281f4cf3800bac2dbdfcda589b26cc828512085ce0d3e57aa13cd9e7a4"
+                                "66d881bace91ed10c6064ab36e0d66367c4bfed56a9f907e4daec16732fb5c54"
+                                "891cb0d26251fd61c32040774246b3f8bdcd5ef60e6847cdd69bd6d318d1cda0"
+                                "e8a30a716de4dc1a4eb99b0686b77120c4b69b0005f6a8c3ae768d23c08c85bd"
+                                "1d58f40dc0138d6277436137ae69779fdc218c071c14826f471562033e85ffc9"
+                                "9a2147d539e274136a4a1e7f1db97583b51dc0385a52d7383963758d893398a8"
+                                "d013fdbad20ddf30fbe05fbb2249913ae6751b6b246ae5622ba26c4827417c2d";
+    const char *hex_local_priv = "1122334455667788990011223344556677889900112233445566778899001122";
+
+    /* Remote malicious parameters */
+    const char *hex_remote_q = "09f5";
+    const char *hex_remote_pub = "54c057903d362235a65c03f001d8a3ea252836b3580250abdc0a1083451af012"
+                                 "6fd150f9e8d212b384ae0c23aa7c67fe851368114ccc061a661e986bd7e63d25"
+                                 "7513339a6914cbfab209ad793ef25704cd532ddfb7e693de701d17e629ef3c18"
+                                 "4d40d5fea1f9edb89c5bf8d7aa19e3374f805932159ca7b5d573b9e2f3c94fe7"
+                                 "47c4a3b09e31afa3788d35833aaf2ac8ae8bc48500131464e793a2e0352e7c3e"
+                                 "d9da9fcf89b121bc1cee83c544214ceb3338b14ac6891968351746eaf62bb517"
+                                 "eb98fc633d8d235bac37bc08e47f1851d05501949a6733965adbfe8e43f7c3b9"
+                                 "3ca7515cd6ab36d7ef26bb0fd6033abc39613e880fffc8729b03bfeaddf08833";
+
+    if (!TEST_true(BN_hex2bn(&p, hex_p)) || !TEST_true(BN_hex2bn(&g, hex_g)))
+        goto err;
+
+    if (!TEST_true(BN_hex2bn(&q_valid, hex_q_valid))
+        || !TEST_true(BN_hex2bn(&pub_local, hex_local_pub))
+        || !TEST_true(BN_hex2bn(&priv_local, hex_local_priv)))
+        goto err;
+
+    if (!TEST_ptr(bld = OSSL_PARAM_BLD_new())
+        || !TEST_true(OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_P, p))
+        || !TEST_true(OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_Q, q_valid))
+        || !TEST_true(OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_G, g))
+        || !TEST_true(OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_PUB_KEY, pub_local))
+        || !TEST_true(OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_PRIV_KEY, priv_local))
+        || !TEST_ptr(params = OSSL_PARAM_BLD_to_param(bld)))
+        goto err;
+
+    if (!TEST_ptr(pctx = EVP_PKEY_CTX_new_from_name(testctx, "DHX", testpropq))
+        || !TEST_int_gt(EVP_PKEY_fromdata_init(pctx), 0)
+        || !TEST_int_gt(EVP_PKEY_fromdata(pctx, &local_key, EVP_PKEY_KEYPAIR, params), 0))
+        goto err;
+
+    OSSL_PARAM_free(params);
+    OSSL_PARAM_BLD_free(bld);
+    EVP_PKEY_CTX_free(pctx);
+    params = NULL;
+    bld = NULL;
+    pctx = NULL;
+
+    if (!TEST_true(BN_hex2bn(&q_bad, hex_remote_q))
+        || !TEST_true(BN_hex2bn(&pub_bad, hex_remote_pub)))
+        goto err;
+
+    if (!TEST_ptr(bld = OSSL_PARAM_BLD_new())
+        || !TEST_true(OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_P, p))
+        || !TEST_true(OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_Q, q_bad))
+        || !TEST_true(OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_G, g))
+        || !TEST_true(OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_PUB_KEY, pub_bad))
+        || !TEST_ptr(params = OSSL_PARAM_BLD_to_param(bld)))
+        goto err;
+
+    if (!TEST_ptr(pctx = EVP_PKEY_CTX_new_from_name(testctx, "DHX", testpropq))
+        || !TEST_int_gt(EVP_PKEY_fromdata_init(pctx), 0)
+        || !TEST_int_gt(EVP_PKEY_fromdata(pctx, &remote_key, EVP_PKEY_PUBLIC_KEY, params), 0))
+        goto err;
+
+    if (!TEST_ptr(derive_ctx = EVP_PKEY_CTX_new(local_key, NULL))
+        || !TEST_int_gt(EVP_PKEY_derive_init(derive_ctx), 0))
+        goto err;
+
+    /* reject the remote key share, even if it is self-consistent, correct
+     * code needs to use local q, not remote-provided q. */
+    if (!TEST_int_le(EVP_PKEY_derive_set_peer(derive_ctx, remote_key), 0)) {
+        TEST_error("EVP_PKEY_derive_set_peer incorrectly accepted a peer with malicious 'q'");
+        goto err;
+    }
+
+    ret = 1;
+
+err:
+    BN_free(p);
+    BN_free(g);
+    BN_free(q_valid);
+    BN_free(pub_local);
+    BN_free(priv_local);
+    BN_free(q_bad);
+    BN_free(pub_bad);
+    OSSL_PARAM_free(params);
+    OSSL_PARAM_BLD_free(bld);
+    EVP_PKEY_CTX_free(pctx);
+    EVP_PKEY_CTX_free(derive_ctx);
+    EVP_PKEY_free(local_key);
+    EVP_PKEY_free(remote_key);
+    return ret;
+}
 #endif /* !OPENSSL_NO_DH */
 
 /*
@@ -5578,6 +5774,477 @@ err:
     EVP_CIPHER_CTX_free(ctx_onestep);
     return testresult;
 }
+
+/*-
+ * A zero-length AEAD message driven through the one-shot EVP_Cipher() interface
+ * must agree with the streaming EVP_CipherFinal_ex() path. This checks:
+ * - an empty message yields the same tag via both interfaces
+ * - the true tag passes verification on decrypt
+ * - the modified tag fails verification on decrypt
+ */
+static int test_evp_oneshot_aead_zerolen(int idx)
+{
+    const EVP_CIPHER_TEST_INFO *info = &cipher_list[idx];
+    EVP_CIPHER_CTX *ctx_stream = NULL; /* reference: final only */
+    EVP_CIPHER_CTX *ctx_oneshot = NULL; /* encrypt via EVP_Cipher(in == NULL) */
+    EVP_CIPHER_CTX *ctx_dec = NULL; /* decrypt via EVP_Cipher(in == NULL) */
+    EVP_CIPHER_CTX *ctx_dec_bad = NULL; /* decrypt with a corrupted tag */
+    EVP_CIPHER_CTX *ctx_dec_s = NULL; /* streaming decrypt */
+    EVP_CIPHER_CTX *ctx_dec_s_bad = NULL; /* streaming decrypt, corrupted tag */
+
+    OSSL_PARAM get_tagparams[2];
+    OSSL_PARAM set_tagparams[2];
+
+    int taglen = info->taglen;
+    unsigned char key[EVP_MAX_KEY_LENGTH] = { 0 };
+    unsigned char iv[EVP_MAX_IV_LENGTH] = { 0 };
+
+    unsigned char ct[16] = { 0 }; /* scratch out; AEAD finalize writes no data */
+    int finlen = 0, oneshot_flen = 0, dec_flen = 0;
+
+    unsigned char tag_stream[EVPTEST_TAG_LEN_MAX] = { 0 };
+    unsigned char tag_oneshot[EVPTEST_TAG_LEN_MAX] = { 0 };
+    unsigned char tag_bad[EVPTEST_TAG_LEN_MAX] = { 0 };
+
+    int i = 0, testresult = 1;
+    char *errmsg = NULL;
+
+    /* filter out various modes */
+    if (info->taglen == 0
+        || info->mode == EVP_CIPH_CCM_MODE
+        || info->mode == EVP_CIPH_OCB_MODE
+        || info->mode == EVP_CIPH_GCM_SIV_MODE
+        /* skip TLS stitched MTE cipher */
+        || EVP_CIPHER_is_a(info->ciph, "AES-128-CBC-HMAC-SHA1")
+        /* skip TLS stitched MTE cipher */
+        || EVP_CIPHER_is_a(info->ciph, "AES-256-CBC-HMAC-SHA1")
+        /* skip TLS stitched MTE cipher */
+        || EVP_CIPHER_is_a(info->ciph, "AES-128-CBC-HMAC-SHA256")
+        /* skip TLS stitched MTE cipher */
+        || EVP_CIPHER_is_a(info->ciph, "AES-256-CBC-HMAC-SHA256")
+        || EVP_CIPHER_is_a(info->ciph, "ChaCha20-Poly1305"))
+        return 1;
+
+    for (i = 0; i < info->keylen && i < (int)sizeof(key); i++)
+        key[i] = (unsigned char)(0xA0 + i);
+    for (i = 0; i < info->ivlen && i < (int)sizeof(iv); i++)
+        iv[i] = (unsigned char)(0xB0 + i);
+
+    /* reference: streaming finalize of an empty message */
+    if (!TEST_ptr(ctx_stream = EVP_CIPHER_CTX_new())) {
+        errmsg = "STREAM_ALLOC";
+        goto err;
+    }
+    if (!TEST_true(EVP_EncryptInit_ex2(ctx_stream, info->ciph, key, iv, NULL))) {
+        errmsg = "STREAM_INIT";
+        goto err;
+    }
+    if (!TEST_true(EVP_EncryptFinal_ex(ctx_stream, ct, &finlen))) {
+        errmsg = "STREAM_FINAL";
+        goto err;
+    }
+
+    /* clamp to the negotiated tag length if the cipher reports one */
+    i = EVP_CIPHER_CTX_get_tag_length(ctx_stream);
+    if (i > 0)
+        taglen = i;
+
+    /* bound the memcpy, should never happen but helps static analysis */
+    if (taglen > EVPTEST_TAG_LEN_MAX) {
+        errmsg = "TAGLEN_EXCEEDS_BUF";
+        goto err;
+    }
+
+    get_tagparams[0] = OSSL_PARAM_construct_octet_string(OSSL_CIPHER_PARAM_AEAD_TAG,
+        tag_stream, taglen);
+    get_tagparams[1] = OSSL_PARAM_construct_end();
+    if (!TEST_true(EVP_CIPHER_CTX_get_params(ctx_stream, get_tagparams))) {
+        errmsg = "STREAM_GET_TAG";
+        goto err;
+    }
+
+    /* one-shot encrypt: finalize the empty message with in == NULL */
+    if (!TEST_ptr(ctx_oneshot = EVP_CIPHER_CTX_new())) {
+        errmsg = "ONESHOT_ALLOC";
+        goto err;
+    }
+    if (!TEST_true(EVP_EncryptInit_ex2(ctx_oneshot, info->ciph, key, iv, NULL))) {
+        errmsg = "ONESHOT_INIT";
+        goto err;
+    }
+    oneshot_flen = EVP_Cipher(ctx_oneshot, ct, NULL, 0);
+    if (!TEST_int_ge(oneshot_flen, 0)) {
+        errmsg = "ONESHOT_FINAL_NULL";
+        goto err;
+    }
+
+    get_tagparams[0] = OSSL_PARAM_construct_octet_string(OSSL_CIPHER_PARAM_AEAD_TAG,
+        tag_oneshot, taglen);
+    if (!TEST_true(EVP_CIPHER_CTX_get_params(ctx_oneshot, get_tagparams))) {
+        errmsg = "ONESHOT_GET_TAG";
+        goto err;
+    }
+    if (!TEST_mem_eq(tag_oneshot, taglen, tag_stream, taglen)) {
+        errmsg = "TAG_MISMATCH_ONESHOT_vs_STREAM";
+        goto err;
+    }
+
+    /* one-shot decrypt: the correct tag must verify via in == NULL */
+    if (!TEST_ptr(ctx_dec = EVP_CIPHER_CTX_new())) {
+        errmsg = "DEC_ALLOC";
+        goto err;
+    }
+    if (!TEST_true(EVP_DecryptInit_ex2(ctx_dec, info->ciph, key, iv, NULL))) {
+        errmsg = "DEC_INIT";
+        goto err;
+    }
+    set_tagparams[0] = OSSL_PARAM_construct_octet_string(OSSL_CIPHER_PARAM_AEAD_TAG,
+        tag_stream, taglen);
+    set_tagparams[1] = OSSL_PARAM_construct_end();
+    if (!TEST_true(EVP_CIPHER_CTX_set_params(ctx_dec, set_tagparams))) {
+        errmsg = "DEC_SET_TAG";
+        goto err;
+    }
+    dec_flen = EVP_Cipher(ctx_dec, ct, NULL, 0);
+    if (!TEST_int_ge(dec_flen, 0)) {
+        errmsg = "DEC_VERIFY_NULL";
+        goto err;
+    }
+
+    /*
+     * ...and a corrupted tag must be rejected. EVP_Cipher() returns < 0 on a
+     * failed one-shot, so a non-negative result here means verification was
+     * skipped or wrongly accepted the bad tag.
+     */
+    memcpy(tag_bad, tag_stream, taglen);
+    tag_bad[0] ^= 0x01;
+    if (!TEST_ptr(ctx_dec_bad = EVP_CIPHER_CTX_new())) {
+        errmsg = "DEC_BAD_ALLOC";
+        goto err;
+    }
+    if (!TEST_true(EVP_DecryptInit_ex2(ctx_dec_bad, info->ciph, key, iv, NULL))) {
+        errmsg = "DEC_BAD_INIT";
+        goto err;
+    }
+    set_tagparams[0] = OSSL_PARAM_construct_octet_string(OSSL_CIPHER_PARAM_AEAD_TAG,
+        tag_bad, taglen);
+    if (!TEST_true(EVP_CIPHER_CTX_set_params(ctx_dec_bad, set_tagparams))) {
+        errmsg = "DEC_BAD_SET_TAG";
+        goto err;
+    }
+    if (!TEST_int_lt(EVP_Cipher(ctx_dec_bad, ct, NULL, 0), 0)) {
+        errmsg = "DEC_BADTAG_NOT_REJECTED";
+        goto err;
+    }
+
+    /* streaming decrypt: the correct tag must verify via EVP_DecryptFinal_ex */
+    if (!TEST_ptr(ctx_dec_s = EVP_CIPHER_CTX_new())) {
+        errmsg = "DEC_STREAM_ALLOC";
+        goto err;
+    }
+    if (!TEST_true(EVP_DecryptInit_ex2(ctx_dec_s, info->ciph, key, iv, NULL))) {
+        errmsg = "DEC_STREAM_INIT";
+        goto err;
+    }
+    set_tagparams[0] = OSSL_PARAM_construct_octet_string(OSSL_CIPHER_PARAM_AEAD_TAG,
+        tag_stream, taglen);
+    if (!TEST_true(EVP_CIPHER_CTX_set_params(ctx_dec_s, set_tagparams))) {
+        errmsg = "DEC_STREAM_SET_TAG";
+        goto err;
+    }
+    if (!TEST_true(EVP_DecryptFinal_ex(ctx_dec_s, ct, &finlen))) {
+        errmsg = "DEC_STREAM_VERIFY";
+        goto err;
+    }
+
+    /* streaming decrypt: a corrupted tag must be rejected */
+    if (!TEST_ptr(ctx_dec_s_bad = EVP_CIPHER_CTX_new())) {
+        errmsg = "DEC_STREAM_BAD_ALLOC";
+        goto err;
+    }
+    if (!TEST_true(EVP_DecryptInit_ex2(ctx_dec_s_bad, info->ciph, key, iv, NULL))) {
+        errmsg = "DEC_STREAM_BAD_INIT";
+        goto err;
+    }
+    set_tagparams[0] = OSSL_PARAM_construct_octet_string(OSSL_CIPHER_PARAM_AEAD_TAG,
+        tag_bad, taglen);
+    if (!TEST_true(EVP_CIPHER_CTX_set_params(ctx_dec_s_bad, set_tagparams))) {
+        errmsg = "DEC_STREAM_BAD_SET_TAG";
+        goto err;
+    }
+    if (!TEST_false(EVP_DecryptFinal_ex(ctx_dec_s_bad, ct, &finlen))) {
+        errmsg = "DEC_STREAM_BADTAG_NOT_REJECTED";
+        goto err;
+    }
+
+err:
+    if (errmsg != NULL) {
+        TEST_info("test_evp_oneshot_aead_zerolen %d, %s: %s",
+            idx, errmsg, info->name);
+        testresult = 0;
+    }
+    EVP_CIPHER_CTX_free(ctx_stream);
+    EVP_CIPHER_CTX_free(ctx_oneshot);
+    EVP_CIPHER_CTX_free(ctx_dec);
+    EVP_CIPHER_CTX_free(ctx_dec_bad);
+    EVP_CIPHER_CTX_free(ctx_dec_s);
+    EVP_CIPHER_CTX_free(ctx_dec_s_bad);
+    return testresult;
+}
+
+/*
+ * With AEAD ciphers, a tag is an input for decryption (the value to verify)
+ * and an output of encryption (the generated value). Therefore:
+ *   - supplying a tag value while encrypting must fail
+ *   - reading a tag while decrypting must fail
+ *   - error codes should be consistent across all AEADs
+ */
+static int test_evp_aead_tag_direction(int idx)
+{
+    const EVP_CIPHER_TEST_INFO *info = &cipher_list[idx];
+    EVP_CIPHER_CTX *ctx_enc = NULL; /* set tag while encrypting: must fail */
+    EVP_CIPHER_CTX *ctx_dec = NULL; /* get tag while decrypting: must fail */
+
+    OSSL_PARAM tagparams[2];
+
+    unsigned char key[EVP_MAX_KEY_LENGTH] = { 0 };
+    unsigned char iv[EVP_MAX_IV_LENGTH] = { 0 };
+    unsigned char tag[EVPTEST_TAG_LEN_MAX] = { 0 };
+
+    int i = 0, testresult = 0, expected = 0;
+    char *errmsg = NULL;
+    unsigned long err_code = 0;
+
+    /* filter out various modes */
+    if (info->taglen == 0
+        /* skip TLS stitched MTE cipher */
+        || EVP_CIPHER_is_a(info->ciph, "AES-128-CBC-HMAC-SHA1")
+        /* skip TLS stitched MTE cipher */
+        || EVP_CIPHER_is_a(info->ciph, "AES-256-CBC-HMAC-SHA1")
+        /* skip TLS stitched MTE cipher */
+        || EVP_CIPHER_is_a(info->ciph, "AES-128-CBC-HMAC-SHA256")
+        /* skip TLS stitched MTE cipher */
+        || EVP_CIPHER_is_a(info->ciph, "AES-256-CBC-HMAC-SHA256"))
+        return 1;
+
+    for (i = 0; i < info->keylen && i < (int)sizeof(key); i++)
+        key[i] = (unsigned char)(0xA0 + i);
+    for (i = 0; i < info->ivlen && i < (int)sizeof(iv); i++)
+        iv[i] = (unsigned char)(0xB0 + i);
+
+    /*
+     * a tag value supplied while encrypting must be rejected. data is non-NULL
+     * so this is a value-set, not the data == NULL tag-length query.
+     */
+    if (!TEST_ptr(ctx_enc = EVP_CIPHER_CTX_new())) {
+        errmsg = "ENC_ALLOC";
+        goto err;
+    }
+    if (!TEST_true(EVP_EncryptInit_ex2(ctx_enc, info->ciph, key, iv, NULL))) {
+        errmsg = "ENC_INIT";
+        goto err;
+    }
+    tagparams[0] = OSSL_PARAM_construct_octet_string(OSSL_CIPHER_PARAM_AEAD_TAG,
+        tag, info->taglen);
+    tagparams[1] = OSSL_PARAM_construct_end();
+    ERR_set_mark();
+    if (!TEST_false(EVP_CIPHER_CTX_set_params(ctx_enc, tagparams))) {
+        ERR_clear_last_mark();
+        errmsg = "ENC_SET_TAG_NOT_REJECTED";
+        goto err;
+    }
+    err_code = ERR_peek_last_error();
+    if (!TEST_int_eq(ERR_GET_LIB(err_code), ERR_LIB_PROV)
+        || !TEST_int_eq(ERR_GET_REASON(err_code), PROV_R_TAG_NOT_NEEDED)) {
+        ERR_clear_last_mark();
+        expected = PROV_R_TAG_NOT_NEEDED;
+        errmsg = "ENC_SET_TAG_WRONG_REASON";
+        goto err;
+    }
+    ERR_pop_to_mark();
+
+    /* a tag read while decrypting must be rejected */
+    if (!TEST_ptr(ctx_dec = EVP_CIPHER_CTX_new())) {
+        errmsg = "DEC_ALLOC";
+        goto err;
+    }
+    if (!TEST_true(EVP_DecryptInit_ex2(ctx_dec, info->ciph, key, iv, NULL))) {
+        errmsg = "DEC_INIT";
+        goto err;
+    }
+    tagparams[0] = OSSL_PARAM_construct_octet_string(OSSL_CIPHER_PARAM_AEAD_TAG,
+        tag, info->taglen);
+    tagparams[1] = OSSL_PARAM_construct_end();
+
+    /* set a tag so the get below is exercised with one present */
+    if (!TEST_true(EVP_CIPHER_CTX_set_params(ctx_dec, tagparams))) {
+        errmsg = "DEC_SET_TAG_REJECTED";
+        goto err;
+    }
+
+    /* but a tag must never be readable back while decrypting */
+    ERR_set_mark();
+    if (!TEST_false(EVP_CIPHER_CTX_get_params(ctx_dec, tagparams))) {
+        ERR_clear_last_mark();
+        errmsg = "DEC_GET_TAG_NOT_REJECTED";
+        goto err;
+    }
+    err_code = ERR_peek_last_error();
+    if (!TEST_int_eq(ERR_GET_LIB(err_code), ERR_LIB_PROV)
+        || !TEST_int_eq(ERR_GET_REASON(err_code), PROV_R_TAG_NOT_SET)) {
+        ERR_clear_last_mark();
+        expected = PROV_R_TAG_NOT_SET;
+        errmsg = "DEC_GET_TAG_WRONG_REASON";
+        goto err;
+    }
+    ERR_pop_to_mark();
+
+    testresult = 1;
+
+err:
+    if (errmsg != NULL) {
+        if (expected != 0)
+            TEST_info("test_evp_aead_tag_direction %d, %s: %s"
+                      " (expected reason %d, got %d)",
+                idx, errmsg, info->name,
+                expected, ERR_GET_REASON(err_code));
+        else
+            TEST_info("test_evp_aead_tag_direction %d, %s: %s",
+                idx, errmsg, info->name);
+    }
+    EVP_CIPHER_CTX_free(ctx_enc);
+    EVP_CIPHER_CTX_free(ctx_dec);
+    return testresult;
+}
+
+/*
+ * With AEAD ciphers, associated data must precede the payload. Once plaintext
+ * or ciphertext processing has begun, a further AAD update (out == NULL) must
+ * be rejected, and the rejection must be reported the same way across every
+ * AEAD: ERR_LIB_PROV / PROV_R_UPDATE_CALL_OUT_OF_ORDER. The invariant is
+ * checked in both the encrypt and decrypt directions.
+ */
+static int test_evp_aead_late_aad(int idx)
+{
+    const EVP_CIPHER_TEST_INFO *info = &cipher_list[idx];
+    EVP_CIPHER_CTX *ctx_enc = NULL; /* late AAD after plaintext: must fail */
+    EVP_CIPHER_CTX *ctx_dec = NULL; /* late AAD after ciphertext: must fail */
+
+    unsigned char key[EVP_MAX_KEY_LENGTH] = { 0 };
+    unsigned char iv[EVP_MAX_IV_LENGTH] = { 0 };
+    unsigned char aad[] = "aad";
+    unsigned char msg[] = "message";
+    unsigned char out[sizeof(msg) + EVP_MAX_BLOCK_LENGTH];
+
+    int i = 0, len = 0, testresult = 0, expected = 0;
+    char *errmsg = NULL;
+    unsigned long err_code = 0;
+
+    if (info->taglen == 0 /* skip non-AEAD */
+        || info->mode == EVP_CIPH_GCM_MODE /* rejects, raises 102 PROV_R_CIPHER_OPERATION_FAILED */
+        || info->mode == EVP_CIPH_CCM_MODE /* fails at first AAD */
+        || info->mode == EVP_CIPH_OCB_MODE /* accepts late AAD */
+        || info->mode == EVP_CIPH_GCM_SIV_MODE /* accepts late AAD */
+        /* skip TLS stitched MTE cipher */
+        || EVP_CIPHER_is_a(info->ciph, "AES-128-CBC-HMAC-SHA1")
+        /* skip TLS stitched MTE cipher */
+        || EVP_CIPHER_is_a(info->ciph, "AES-256-CBC-HMAC-SHA1")
+        /* skip TLS stitched MTE cipher */
+        || EVP_CIPHER_is_a(info->ciph, "AES-128-CBC-HMAC-SHA256")
+        /* skip TLS stitched MTE cipher */
+        || EVP_CIPHER_is_a(info->ciph, "AES-256-CBC-HMAC-SHA256"))
+        return 1;
+
+    for (i = 0; i < info->keylen && i < (int)sizeof(key); i++)
+        key[i] = (unsigned char)(0xA0 + i);
+    for (i = 0; i < info->ivlen && i < (int)sizeof(iv); i++)
+        iv[i] = (unsigned char)(0xB0 + i);
+
+    /* encrypt: aad, then plaintext, then a late aad update must be rejected */
+    if (!TEST_ptr(ctx_enc = EVP_CIPHER_CTX_new())) {
+        errmsg = "ENC_ALLOC";
+        goto err;
+    }
+    if (!TEST_true(EVP_EncryptInit_ex2(ctx_enc, info->ciph, key, iv, NULL))) {
+        errmsg = "ENC_INIT";
+        goto err;
+    }
+    if (!TEST_true(EVP_EncryptUpdate(ctx_enc, NULL, &len, aad, sizeof(aad)))) {
+        errmsg = "ENC_AAD";
+        goto err;
+    }
+    if (!TEST_true(EVP_EncryptUpdate(ctx_enc, out, &len, msg, sizeof(msg)))) {
+        errmsg = "ENC_PLAINTEXT";
+        goto err;
+    }
+    ERR_set_mark();
+    if (!TEST_false(EVP_EncryptUpdate(ctx_enc, NULL, &len, aad, sizeof(aad)))) {
+        ERR_clear_last_mark();
+        errmsg = "ENC_LATE_AAD_NOT_REJECTED";
+        goto err;
+    }
+    err_code = ERR_peek_last_error();
+    if (!TEST_int_eq(ERR_GET_LIB(err_code), ERR_LIB_PROV)
+        || !TEST_int_eq(ERR_GET_REASON(err_code), PROV_R_UPDATE_CALL_OUT_OF_ORDER)) {
+        ERR_clear_last_mark();
+        expected = PROV_R_UPDATE_CALL_OUT_OF_ORDER;
+        errmsg = "ENC_LATE_AAD_WRONG_REASON";
+        goto err;
+    }
+    ERR_pop_to_mark();
+
+    /* decrypt: same sequence, late aad after ciphertext must be rejected */
+    if (!TEST_ptr(ctx_dec = EVP_CIPHER_CTX_new())) {
+        errmsg = "DEC_ALLOC";
+        goto err;
+    }
+    if (!TEST_true(EVP_DecryptInit_ex2(ctx_dec, info->ciph, key, iv, NULL))) {
+        errmsg = "DEC_INIT";
+        goto err;
+    }
+    if (!TEST_true(EVP_DecryptUpdate(ctx_dec, NULL, &len, aad, sizeof(aad)))) {
+        errmsg = "DEC_AAD";
+        goto err;
+    }
+    /* the ciphertext content is irrelevant; the tag is never finalized here */
+    if (!TEST_true(EVP_DecryptUpdate(ctx_dec, out, &len, msg, sizeof(msg)))) {
+        errmsg = "DEC_CIPHERTEXT";
+        goto err;
+    }
+    ERR_set_mark();
+    if (!TEST_false(EVP_DecryptUpdate(ctx_dec, NULL, &len, aad, sizeof(aad)))) {
+        ERR_clear_last_mark();
+        errmsg = "DEC_LATE_AAD_NOT_REJECTED";
+        goto err;
+    }
+    err_code = ERR_peek_last_error();
+    if (!TEST_int_eq(ERR_GET_LIB(err_code), ERR_LIB_PROV)
+        || !TEST_int_eq(ERR_GET_REASON(err_code), PROV_R_UPDATE_CALL_OUT_OF_ORDER)) {
+        ERR_clear_last_mark();
+        expected = PROV_R_UPDATE_CALL_OUT_OF_ORDER;
+        errmsg = "DEC_LATE_AAD_WRONG_REASON";
+        goto err;
+    }
+    ERR_pop_to_mark();
+
+    testresult = 1;
+
+err:
+    if (errmsg != NULL) {
+        if (expected != 0)
+            TEST_info("test_evp_aead_late_aad %d, %s: %s"
+                      " (expected reason %d, got %d)",
+                idx, errmsg, info->name,
+                expected, ERR_GET_REASON(err_code));
+        else
+            TEST_info("test_evp_aead_late_aad %d, %s: %s",
+                idx, errmsg, info->name);
+    }
+    EVP_CIPHER_CTX_free(ctx_enc);
+    EVP_CIPHER_CTX_free(ctx_dec);
+    return testresult;
+}
+
 /*
  * Verify stale key is not being used after providing a new key in multiple steps.
  * This test performs a full round of encryption and then changes the
@@ -7401,6 +8068,70 @@ end:
     return ret;
 }
 
+static int test_aes_xts_rejects_missing_iv(void)
+{
+    static const unsigned char key[32] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+        0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+        0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
+    };
+    static const unsigned char in[32] = {
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+        0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+        0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa, 0x99, 0x88,
+        0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0x00
+    };
+    static const unsigned char iv[16] = {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02
+    };
+    EVP_CIPHER_CTX *ctx = NULL;
+    EVP_CIPHER *cipher = NULL;
+    unsigned char out[sizeof(in)];
+    int outl = 0;
+    int ret = 0;
+
+    if ((cipher = EVP_CIPHER_fetch(testctx, "AES-128-XTS", testpropq)) == NULL)
+        return TEST_skip("AES-128-XTS cipher is not available");
+
+    /* Initialize with a valid IV as a positive control */
+    if (!TEST_ptr(ctx = EVP_CIPHER_CTX_new())
+        || !TEST_true(EVP_EncryptInit_ex2(ctx, cipher, key, iv, NULL))
+        || !TEST_true(EVP_EncryptUpdate(ctx, out, &outl, in, sizeof(in)))
+        || !TEST_int_eq(outl, (int)sizeof(in)))
+        goto err;
+
+    EVP_CIPHER_CTX_free(ctx);
+    ctx = NULL;
+    outl = 0;
+
+    if (!TEST_ptr(ctx = EVP_CIPHER_CTX_new()))
+        goto err;
+
+    /* Initialize with a NULL IV, which may fail immediately */
+    ERR_set_mark();
+    if (!EVP_EncryptInit_ex2(ctx, cipher, key, NULL, NULL)) {
+        ERR_pop_to_mark();
+        ret = 1;
+        goto err;
+    }
+
+    /* Test EVP_EncryptUpdate after NULL IV initialization, which should fail */
+    if (!TEST_false(EVP_EncryptUpdate(ctx, out, &outl, in, sizeof(in)))) {
+        ERR_clear_last_mark();
+        goto err;
+    }
+    ERR_pop_to_mark();
+
+    ret = 1;
+
+err:
+    EVP_CIPHER_free(cipher);
+    EVP_CIPHER_CTX_free(ctx);
+    return ret;
+}
+
 /*
  * Cross-driver round-trip test for AEAD one-shot vs streaming paths.
  *
@@ -8486,12 +9217,7 @@ int setup_tests(void)
     ADD_TEST(test_EVP_SM2_verify);
 #endif
     ADD_ALL_TESTS(test_set_get_raw_keys, OSSL_NELEM(keys));
-#if defined(_MSC_VER) || defined(OPENSSL_NO_CACHED_FETCH)
-    ADD_MFAIL_ALL_NO_CHECK_TESTS(test_set_get_raw_keys_mfail,
-        OSSL_NELEM(keys));
-#else
     ADD_MFAIL_ALL_TESTS(test_set_get_raw_keys_mfail, OSSL_NELEM(keys));
-#endif
     ADD_ALL_TESTS(test_EVP_PKEY_check, OSSL_NELEM(keycheckdata));
 #ifndef OPENSSL_NO_CMAC
     ADD_TEST(test_CMAC_keygen);
@@ -8502,7 +9228,7 @@ int setup_tests(void)
 #ifndef OPENSSL_NO_EC
     ADD_TEST(test_X509_PUBKEY_inplace);
     ADD_TEST(test_X509_PUBKEY_dup);
-    ADD_ALL_TESTS(test_invalide_ec_char2_pub_range_decode,
+    ADD_ALL_TESTS(test_invalid_ec_char2_pub_range_decode,
         OSSL_NELEM(ec_der_pub_keys));
 #endif
 #ifndef OPENSSL_NO_DSA
@@ -8525,6 +9251,7 @@ int setup_tests(void)
 #ifndef OPENSSL_NO_DEPRECATED_3_0
     ADD_TEST(test_EVP_PKEY_set1_DH);
 #endif
+    ADD_TEST(test_dhx_derive_rejects_bad_peer_q);
 #endif
 #ifndef OPENSSL_NO_EC
     ADD_TEST(test_EC_priv_pub);
@@ -8559,6 +9286,9 @@ int setup_tests(void)
     ADD_ALL_TESTS(test_evp_diff_order_init, cipher_list_n);
     ADD_ALL_TESTS(test_evp_stale_key_reinit, cipher_list_n);
     ADD_ALL_TESTS(test_evp_decrypt_roundtrip_multistep, cipher_list_n);
+    ADD_ALL_TESTS(test_evp_oneshot_aead_zerolen, cipher_list_n);
+    ADD_ALL_TESTS(test_evp_aead_tag_direction, cipher_list_n);
+    ADD_ALL_TESTS(test_evp_aead_late_aad, cipher_list_n);
 
     ADD_ALL_TESTS(test_evp_init_seq, OSSL_NELEM(evp_init_tests));
     ADD_ALL_TESTS(test_evp_reset, OSSL_NELEM(evp_reset_tests));
@@ -8594,6 +9324,7 @@ int setup_tests(void)
     ADD_TEST(test_invalid_ctx_for_digest);
 
     ADD_TEST(test_evp_cipher_negative_length);
+    ADD_TEST(test_aes_xts_rejects_missing_iv);
 
     ADD_TEST(test_evp_cipher_pipeline);
 

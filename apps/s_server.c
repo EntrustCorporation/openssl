@@ -462,7 +462,7 @@ typedef struct tlsextctx_st {
 static unsigned int ech_print_cb(SSL *s, const char *str)
 {
     if (str != NULL)
-        BIO_printf(bio_s_out, "ECH Server callback printing: \n%s\n", str);
+        BIO_printf(bio_s_out, "ECH Server callback printing:\n%s\n", str);
     return 1;
 }
 
@@ -4020,6 +4020,7 @@ static int www_body(int s, int stype, int prot, unsigned char *context)
 
     if (rpk_files != NULL && !rpk_enable(con)) {
         BIO_puts(bio_err, "Error enabling client RPK verification\n");
+        SSL_free(con);
         goto err;
     }
 
@@ -4543,6 +4544,7 @@ static int rev_body(int s, int stype, int prot, unsigned char *context)
     if (rpk_files != NULL && !rpk_enable(con)) {
         BIO_puts(bio_err, "Error enabling client RPK verification\n");
         ERR_print_errors(bio_err);
+        SSL_free(con);
         goto err;
     }
 

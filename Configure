@@ -511,7 +511,6 @@ my @disablables_features = (
     "asan",
     "asm",
     "async",
-    "atexit",
     "autoalginit",
     "autoerrinit",
     "autoload-config",
@@ -578,6 +577,7 @@ my @disablables_features = (
     "ubsan",
     "ui-console",
     "unit-test",
+    "unit-tests",
     "uplink",
     "weak-ssl-ciphers",
     "zlib-dynamic",
@@ -596,6 +596,7 @@ my @disablables_int = qw(
     );
 
 my %deprecated_disablables = (
+    "atexit" => undef,
     "engine" => undef,
     "static-engine" => undef,
     "dynamic-engine" => undef,
@@ -619,6 +620,7 @@ my %deprecated_disablables = (
 # All of the following are disabled by default:
 
 our %disabled = ( # "what"         => "comment"
+                  "atexit"              => "default",
                   "fips"                => "default",
                   "fips-jitter"         => "default",
                   "asan"                => "default",
@@ -653,6 +655,7 @@ our %disabled = ( # "what"         => "comment"
                   "trace"               => "default",
                   "ubsan"               => "default",
                   "unit-test"           => "default",
+                  "unit-tests"          => "default",
                   "weak-ssl-ciphers"    => "default",
                   "zlib"                => "default",
                   "zlib-dynamic"        => "default",
@@ -664,7 +667,7 @@ our %disabled = ( # "what"         => "comment"
 my @disable_cascades = (
     # "what"            => [ "cascade", ... ]
     "bulk"              => [ "shared", "dso",
-                             "argon2", "aria", "async", "atexit", "autoload-config",
+                             "argon2", "aria", "async", "autoload-config",
                              "blake2", "bf", "camellia", "cast", "chacha",
                              "cmac", "cms", "cmp", "comp", "ct",
                              "des", "dgram", "dh", "dsa",
@@ -722,7 +725,7 @@ my @disable_cascades = (
 
     "stdio"             => [ "apps", "egd" ],
     "apps"              => [ "tests" ],
-    "tests"             => [ "external-tests" ],
+    "tests"             => [ "external-tests", "unit-tests" ],
     "comp"              => [ "zlib", "brotli", "zstd" ],
     "sm3"               => [ "sm2" ],
     sub { !$disabled{"unit-test"} } => [ "heartbeats" ],
@@ -1113,6 +1116,22 @@ while (@argvcopy)
                 elsif (/^--with-fuzzer-include=(.*)$/)
                         {
                         $withargs{fuzzer_include}=$1;
+                        }
+                elsif (/^--with-cmocka-lib=(.*)$/)
+                        {
+                        $withargs{cmocka_lib}=$1;
+                        }
+                elsif (/^--with-cmocka-include=(.*)$/)
+                        {
+                        $withargs{cmocka_include}=$1;
+                        }
+                elsif (/^--with-detours-lib=(.*)$/)
+                        {
+                        $withargs{detours_lib}=$1;
+                        }
+                elsif (/^--with-detours-include=(.*)$/)
+                        {
+                        $withargs{detours_include}=$1;
                         }
                 elsif (/^--with-rand-seed=(.*)$/)
                         {
@@ -1670,8 +1689,13 @@ unless ($disabled{asan} || defined $detected_sanitizers{asan}) {
         $config{target} =~ /^VC-/ ? "/fsanitize=address" : "-fsanitize=address";
 }
 
+my %predefined_C = compiler_predefined($config{CROSS_COMPILE}.$config{CC});
+
 unless ($disabled{ubsan} || defined $detected_sanitizers{ubsan}) {
     push @{$config{cflags}}, "-fsanitize=undefined", "-fno-sanitize-recover=all", "-DPEDANTIC";
+    if ($predefined_C{__clang__}) {
+        push @{$config{cflags}}, "-fno-sanitize=function";
+    }
 }
 
 unless ($disabled{msan} || defined $detected_sanitizers{msan}) {
@@ -1751,7 +1775,6 @@ if ($target{sys_id} ne "")
         push @{$config{openssl_sys_defines}}, "OPENSSL_SYS_$target{sys_id}";
         }
 
-my %predefined_C = compiler_predefined($config{CROSS_COMPILE}.$config{CC});
 my %predefined_CXX = $config{CXX}
     ? compiler_predefined($config{CROSS_COMPILE}.$config{CXX})
     : ();
@@ -1911,6 +1934,29 @@ unless ($disabled{winstore}) {
 }
 
 push @{$config{openssl_other_defines}}, "OPENSSL_NO_KTLS" if ($disabled{ktls});
+
+# Keywords accepted in a build.info UNIT_TEST[] link set.
+my @unit_test_keywords = qw(cmocka detours);
+
+unless ($disabled{"unit-tests"}) {
+    if ($target =~ /^linux/ || $target =~ /^BSD/) {
+        $config{cmocka_includes} =
+            $withargs{cmocka_include} ? [$withargs{cmocka_include}] : [];
+        $config{cmocka_libs} = $withargs{cmocka_lib}
+            ? "-L$withargs{cmocka_lib} -lcmocka" : "-lcmocka";
+    } elsif ($target =~ /^VC-/) {
+        $config{cmocka_includes} =
+            $withargs{cmocka_include} ? [$withargs{cmocka_include}] : [];
+        $config{cmocka_libs} = $withargs{cmocka_lib}
+            ? "/LIBPATH:$withargs{cmocka_lib} cmocka.lib" : "cmocka.lib";
+        $config{detours_includes} =
+            $withargs{detours_include} ? [$withargs{detours_include}] : [];
+        $config{detours_libs} = $withargs{detours_lib}
+            ? "/LIBPATH:$withargs{detours_lib} detours.lib" : "detours.lib";
+    } else {
+        disable('no-unit-test-support', 'unit-tests');
+    }
+}
 
 # Get the extra flags used when building shared libraries and modules.  We
 # do this late because some of them depend on %disabled.
@@ -2136,6 +2182,8 @@ if ($builder eq "unified") {
         my %includes = ();
         my %defines = ();
         my %depends = ();
+        my %unit_tests = ();
+        my %wraps = ();
         my %generate = ();
         my %imagedocs = ();
         my %htmldocs = ();
@@ -2389,6 +2437,16 @@ if ($builder eq "unified") {
             qr/^\s* DEPEND ${index_re} ${attribs_re} \s* = \s* ${value_re} \s* $/x
             => sub { $push_to->(\%depends, $expand_variables->($+{INDEX}),
                                 \$attributes{depends}, $+{ATTRIBS},
+                                tokenize($expand_variables->($+{VALUE})))
+                         if !@skip || $skip[$#skip] > 0; },
+            qr/^\s* UNIT_TEST ${index_re} \s* = \s* ${value_re} \s* $/x
+            => sub { $push_to->(\%unit_tests, $expand_variables->($+{INDEX}),
+                                undef, undef,
+                                tokenize($expand_variables->($+{VALUE})))
+                         if !@skip || $skip[$#skip] > 0; },
+            qr/^\s* WRAP ${index_re} \s* = \s* ${value_re} \s* $/x
+            => sub { $push_to->(\%wraps, $expand_variables->($+{INDEX}),
+                                undef, undef,
                                 tokenize($expand_variables->($+{VALUE})))
                          if !@skip || $skip[$#skip] > 0; },
             qr/^\s* GENERATE ${index_re} ${attribs_re} \s* = \s* ${value_re} \s* $/x
@@ -2675,6 +2733,27 @@ if ($builder eq "unified") {
                     push @{$config{defines}}, $v;
                 }
             }
+        }
+
+        foreach my $dest (keys %wraps) {
+            my $ddest = cleanfile($buildd, $dest, $blddir);
+            foreach my $fn (@{$wraps{$dest}}) {
+                push @{$unified_info{wraps}->{$ddest}}, $fn;
+            }
+        }
+
+        foreach my $dest (keys %unit_tests) {
+            my $ddest = cleanfile($buildd, $dest, $blddir);
+            foreach my $kw (@{$unit_tests{$dest}}) {
+                die "***** Unknown keyword '$kw' in UNIT_TEST[$dest] at $sourced/$f\n"
+                    unless grep { $_ eq $kw } @unit_test_keywords;
+            }
+            $unified_info{unit_tests}->{$ddest} =
+                [ @{$unit_tests{$dest}} ];
+        }
+        # WRAP implies cmocka unless an explicit UNIT_TEST set was given
+        foreach my $dest (keys %{$unified_info{wraps} // {}}) {
+            $unified_info{unit_tests}->{$dest} //= [ "cmocka" ];
         }
 
         foreach my $section (keys %imagedocs) {
@@ -3006,6 +3085,28 @@ EOF
                     $product;
             }
         }
+    }
+}
+
+# Attach cmocka (and, on Windows, Detours) include paths to unit tests,
+# based on each test's UNIT_TEST[] link set.
+if (!$disabled{"unit-tests"}) {
+    while (my ($dest, $libs) = each %{$unified_info{unit_tests} // {}}) {
+        my %want = map { $_ => 1 } @$libs;
+        push @{$unified_info{includes}->{$dest}}, @{$config{cmocka_includes}}
+            if $want{cmocka} && @{$config{cmocka_includes} // []};
+        push @{$unified_info{includes}->{$dest}}, @{$config{detours_includes}}
+            if $want{detours} && @{$config{detours_includes} // []};
+    }
+}
+
+if (!$disabled{"unit-tests"}) {
+    foreach my $dest (sort keys %{$unified_info{unit_tests} // {}}) {
+        my %want = map { $_ => 1 } @{$unified_info{unit_tests}->{$dest}};
+        my @resolved;
+        push @resolved, '$(CMOCKA_LIBS)'  if $want{cmocka}  && $config{cmocka_libs};
+        push @resolved, '$(DETOURS_LIBS)' if $want{detours} && $config{detours_libs};
+        $unified_info{unit_test_libs}->{$dest} = join(' ', @resolved);
     }
 }
 

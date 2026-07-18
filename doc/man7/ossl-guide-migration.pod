@@ -38,6 +38,12 @@ ASN1_BIT_STRING_set1(). The new functions in addition to what
 ASN1_BIT_STRING_set() does, validates the function arguments and sets
 unused bits after setting the BIT STRING value.
 
+=head3 Deprecation of EVP_KDF_CTX_kdf()
+
+This function is deprecated in favour of EVP_KDF_CTX_get0_ctx(), to align
+with the naming of functions that provide similar functionality for other kinds
+of EVP context oobjects.
+
 =head1 OPENSSL 4.0
 
 =head2 Main Changes from OpenSSL 3.6
@@ -643,7 +649,9 @@ implemented by EVP_RAND and EVP_RAND_CTX.
 These functions are legacy APIs that are not applicable to the new provider
 model. Applications should instead use
 L<EVP_default_properties_is_fips_enabled(3)> and
-L<EVP_default_properties_enable_fips(3)>.
+L<EVP_default_properties_enable_fips(3)>. A convenience define from FIPS_mode()
+to L<EVP_default_properties_is_fips_enabled(3)> is provided in the
+<openssl/evp.h> header.
 
 =head4 Key generation is slower
 

@@ -15,6 +15,30 @@
 #include "internal/nelem.h"
 #include "testutil.h"
 
+static int pkcs7_issuer_and_serial_negative_idx_test(void)
+{
+    PKCS7 *p7 = NULL;
+    PKCS7_RECIP_INFO *ri = NULL;
+    int ret = 0;
+
+    if (!TEST_ptr(p7 = PKCS7_new())
+        || !TEST_true(PKCS7_set_type(p7, NID_pkcs7_signedAndEnveloped))
+        || !TEST_ptr(ri = PKCS7_RECIP_INFO_new())
+        || !TEST_true(PKCS7_add_recipient_info(p7, ri)))
+        goto end;
+    ri = NULL;
+
+    if (!TEST_ptr(PKCS7_get_issuer_and_serial(p7, 0))
+        || !TEST_ptr_null(PKCS7_get_issuer_and_serial(p7, -1)))
+        goto end;
+
+    ret = 1;
+end:
+    PKCS7_RECIP_INFO_free(ri);
+    PKCS7_free(p7);
+    return ret;
+}
+
 #ifndef OPENSSL_NO_EC
 static const unsigned char cert_der[] = {
     0x30, 0x82, 0x01, 0x51, 0x30, 0x81, 0xf7, 0xa0, 0x03, 0x02, 0x01, 0x02,
@@ -361,10 +385,10 @@ static int pkcs7_inner_content_verify_test(void)
         0x2D, 0x6F, 0x81
     };
 
-    if (!TEST_ptr(bio = BIO_new_mem_buf(sig_der, sizeof sig_der)))
+    if (!TEST_ptr(bio = BIO_new_mem_buf(sig_der, sizeof(sig_der))))
         goto end;
 
-    ret = TEST_ptr(x509_bio = BIO_new_mem_buf(smroot_der, sizeof smroot_der))
+    ret = TEST_ptr(x509_bio = BIO_new_mem_buf(smroot_der, sizeof(smroot_der)))
         && TEST_ptr(cert = d2i_X509_bio(x509_bio, NULL))
         && TEST_int_eq(ERR_peek_error(), 0)
         && TEST_ptr(store = X509_STORE_new())
@@ -389,6 +413,7 @@ end:
 
 int setup_tests(void)
 {
+    ADD_TEST(pkcs7_issuer_and_serial_negative_idx_test);
 #ifndef OPENSSL_NO_EC
     ADD_TEST(pkcs7_verify_test);
     ADD_TEST(pkcs7_inner_content_verify_test);

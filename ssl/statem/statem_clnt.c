@@ -1639,7 +1639,7 @@ static int set_client_ciphersuite(SSL_CONNECTION *s,
      * If it is a disabled cipher we either didn't send it in client hello,
      * or it's not allowed for the selected protocol. So we return an error.
      */
-    if (ssl_cipher_disabled(s, c, SSL_SECOP_CIPHER_CHECK, 1)) {
+    if (ssl_cipher_disabled(s, c, SSL_SECOP_CIPHER_CHECK)) {
         SSLfatal(s, SSL_AD_ILLEGAL_PARAMETER, SSL_R_WRONG_CIPHER_RETURNED);
         return 0;
     }
@@ -3171,6 +3171,14 @@ MSG_PROCESS_RETURN tls_process_new_session_ticket(SSL_CONNECTION *s,
 
     if (SSL_CONNECTION_IS_TLS13(s)) {
         PACKET extpkt;
+
+        /*
+         * Fulfilling RFC8446:4.6.1 requirement: Clients MUST NOT cache
+         * tickets for longer than 7 days.
+         */
+        if (ticket_lifetime_hint > 604800) {
+            ticket_lifetime_hint = 604800;
+        }
 
         if (!PACKET_as_length_prefixed_2(pkt, &extpkt)
             || PACKET_remaining(pkt) != 0) {

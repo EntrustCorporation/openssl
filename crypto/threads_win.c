@@ -7,14 +7,13 @@
  * https://www.openssl.org/source/license.html
  */
 
-#if defined(_WIN32)
-#include <windows.h>
+#include "internal/e_os.h"
+
 #if defined(_WIN32_WINNT) && _WIN32_WINNT >= 0x600
 #define USE_RWLOCK
 #endif
-#endif
-#include <assert.h>
 
+#include <assert.h>
 #include <openssl/crypto.h>
 #include <crypto/cryptlib.h>
 #include "internal/common.h"
@@ -443,15 +442,11 @@ CRYPTO_RWLOCK *CRYPTO_THREAD_lock_new(void)
         /* Don't set error, to avoid recursion blowup. */
         return NULL;
 
-#if !defined(_WIN32_WCE)
     /* 0x400 is the spin count value suggested in the documentation */
     if (!InitializeCriticalSectionAndSpinCount(lock, 0x400)) {
         OPENSSL_free(lock);
         return NULL;
     }
-#else
-    InitializeCriticalSection(lock);
-#endif
 #endif
 
     return lock;
@@ -512,28 +507,46 @@ void CRYPTO_THREAD_lock_free(CRYPTO_RWLOCK *lock)
     return;
 }
 
-struct init_once_cb_info {
-    void (*init)(void);
-};
+#define ONCE_UNINITED 0
+#define ONCE_ININIT 1
+#define ONCE_DONE 2
 
-static BOOL CALLBACK init_wrapper(PINIT_ONCE InitOnce, PVOID param, PVOID *context)
-{
-    struct init_once_cb_info *info = (struct init_once_cb_info *)param;
-
-    info->init();
-    return TRUE;
-}
-
+/*
+ * We don't use InitOnceExecuteOnce because that isn't available in WinXP which
+ * we still have to support.
+ */
 int CRYPTO_THREAD_run_once(CRYPTO_ONCE *once, void (*init)(void))
 {
-    INIT_ONCE *myonce = (INIT_ONCE *)once;
-    struct init_once_cb_info info = { init };
-    BOOL bstatus;
+    LONG volatile *lock = (LONG *)once;
+    LONG result;
 
-    bstatus = InitOnceExecuteOnce(myonce, init_wrapper, (void *)&info, NULL);
-    if (bstatus == TRUE)
+    if (*lock == ONCE_DONE)
         return 1;
-    return 0;
+
+    do {
+        result = InterlockedCompareExchange(lock, ONCE_ININIT, ONCE_UNINITED);
+        if (result == ONCE_UNINITED) {
+            init();
+            /*
+             * On weakly ordered systems, it may happen that the write to *lock
+             * below completes prior to some writes in whatever the init()
+             * callback routine above may do.  In this case, other threads
+             * entering here may see unsynchronized data in whatever the init
+             * routine initializes, leading to erroneous behavior.
+             *
+             * We should use InitOnceExecuteOnce here to implement this, but
+             * doing so requires that we modify the definition of the
+             * CRYPTO_ONCE type, which is an ABI breakage.  So instead
+             * just insert a memory barrier here to ensure that any pending
+             * writes are flushed to memory prior to setting ONCE_DONE below
+             */
+            MemoryBarrier();
+            *lock = ONCE_DONE;
+            return 1;
+        }
+    } while (result == ONCE_ININIT);
+
+    return (*lock == ONCE_DONE);
 }
 
 int CRYPTO_THREAD_init_local(CRYPTO_THREAD_LOCAL *key, void (*cleanup)(void *))

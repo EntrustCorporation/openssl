@@ -68,12 +68,6 @@ static inline int CRYPTO_DOWN_REF(CRYPTO_REF_COUNT *refcnt, int *ret)
     return 1;
 }
 
-static inline int CRYPTO_GET_REF(CRYPTO_REF_COUNT *refcnt, int *ret)
-{
-    *ret = atomic_load_explicit(&refcnt->val, memory_order_acquire);
-    return 1;
-}
-
 #elif defined(__GNUC__) && defined(__ATOMIC_RELAXED) && __GCC_ATOMIC_INT_LOCK_FREE > 0
 
 #define HAVE_ATOMICS 1
@@ -96,12 +90,6 @@ static __inline__ int CRYPTO_DOWN_REF(CRYPTO_REF_COUNT *refcnt, int *ret)
     return 1;
 }
 
-static __inline__ int CRYPTO_GET_REF(CRYPTO_REF_COUNT *refcnt, int *ret)
-{
-    *ret = __atomic_load_n(&refcnt->val, __ATOMIC_RELAXED);
-    return 1;
-}
-
 #elif defined(__ICL) && defined(_WIN32)
 #define HAVE_ATOMICS 1
 
@@ -121,12 +109,6 @@ static __inline int CRYPTO_DOWN_REF(CRYPTO_REF_COUNT *refcnt, int *ret)
     return 1;
 }
 
-static __inline int CRYPTO_GET_REF(CRYPTO_REF_COUNT *refcnt, int *ret)
-{
-    *ret = _InterlockedExchangeAdd((void *)&refcnt->val, 0);
-    return 1;
-}
-
 #elif defined(_MSC_VER) && _MSC_VER >= 1200
 
 #define HAVE_ATOMICS 1
@@ -135,7 +117,7 @@ typedef struct {
     volatile int val;
 } CRYPTO_REF_COUNT;
 
-#if (defined(_M_ARM) && _M_ARM >= 7 && !defined(_WIN32_WCE)) || defined(_M_ARM64)
+#if (defined(_M_ARM) && _M_ARM >= 7) || defined(_M_ARM64)
 #include <intrin.h>
 #if defined(_M_ARM64) && !defined(_ARM_BARRIER_ISH)
 #define _ARM_BARRIER_ISH _ARM64_BARRIER_ISH
@@ -153,24 +135,8 @@ static __inline int CRYPTO_DOWN_REF(CRYPTO_REF_COUNT *refcnt, int *ret)
     return 1;
 }
 
-static __inline int CRYPTO_GET_REF(CRYPTO_REF_COUNT *refcnt, int *ret)
-{
-    *ret = _InterlockedExchangeAdd_acq((void *)&refcnt->val, 0);
-    return 1;
-}
-
 #else
-#if !defined(_WIN32_WCE)
 #pragma intrinsic(_InterlockedExchangeAdd)
-#else
-#if _WIN32_WCE >= 0x600
-extern long __cdecl _InterlockedExchangeAdd(long volatile *, long);
-#else
-/* under Windows CE we still have old-style Interlocked* functions */
-extern long __cdecl InterlockedExchangeAdd(long volatile *, long);
-#define _InterlockedExchangeAdd InterlockedExchangeAdd
-#endif
-#endif
 
 static __inline int CRYPTO_UP_REF(CRYPTO_REF_COUNT *refcnt, int *ret)
 {
@@ -181,12 +147,6 @@ static __inline int CRYPTO_UP_REF(CRYPTO_REF_COUNT *refcnt, int *ret)
 static __inline int CRYPTO_DOWN_REF(CRYPTO_REF_COUNT *refcnt, int *ret)
 {
     *ret = _InterlockedExchangeAdd(&refcnt->val, -1) - 1;
-    return 1;
-}
-
-static __inline int CRYPTO_GET_REF(CRYPTO_REF_COUNT *refcnt, int *ret)
-{
-    *ret = _InterlockedExchangeAdd(&refcnt->val, 0);
     return 1;
 }
 
@@ -223,12 +183,6 @@ static ossl_unused ossl_inline int CRYPTO_DOWN_REF(CRYPTO_REF_COUNT *refcnt,
     return CRYPTO_atomic_add(&refcnt->val, -1, ret, refcnt->lock);
 }
 
-static ossl_unused ossl_inline int CRYPTO_GET_REF(CRYPTO_REF_COUNT *refcnt,
-    int *ret)
-{
-    return CRYPTO_atomic_load_int(&refcnt->val, ret, refcnt->lock);
-}
-
 #define CRYPTO_NEW_FREE_DEFINED 1
 static ossl_unused ossl_inline int CRYPTO_NEW_REF(CRYPTO_REF_COUNT *refcnt, int n)
 {
@@ -261,13 +215,6 @@ static ossl_unused ossl_inline int CRYPTO_DOWN_REF(CRYPTO_REF_COUNT *refcnt,
     int *ret)
 {
     refcnt->val--;
-    *ret = refcnt->val;
-    return 1;
-}
-
-static ossl_unused ossl_inline int CRYPTO_GET_REF(CRYPTO_REF_COUNT *refcnt,
-    int *ret)
-{
     *ret = refcnt->val;
     return 1;
 }

@@ -314,6 +314,7 @@ ERR_raise                               define
 ERR_raise_data                          define
 EVP_DigestSignUpdate                    define
 EVP_DigestVerifyUpdate                  define
+EVP_KDF_CTX_kdf                         define
 EVP_MD_CTX_get_block_size               define
 EVP_MD_CTX_get0_name                    define
 EVP_MD_CTX_get_size                     define
@@ -415,6 +416,7 @@ EVP_RSA_gen                             define
 EVP_seed_cfb                            define
 EVP_sm4_cfb                             define
 EXT_UTF8STRING                          define
+FIPS_mode                               define
 OBJ_cleanup                             define deprecated 1.1.0
 OCSP_parse_url                          define
 OCSP_REQ_CTX                            datatype deprecated 3.0.0
@@ -645,6 +647,7 @@ SSL_clear_mode                          define
 SSL_disable_ct                          define
 SSL_get0_chain_certs                    define
 SSL_get0_iana_groups                    define
+SSL_get0_ec_point_formats               define
 SSL_get0_session                        define
 SSL_get0_chain_cert_store               define
 SSL_get0_verify_cert_store              define
