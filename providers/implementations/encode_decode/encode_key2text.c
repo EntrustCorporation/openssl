@@ -769,22 +769,6 @@ MAKE_TEXT_ENCODER(lms, lms);
 #endif
 
 #ifndef OPENSSL_NO_COMPOSITE
-MAKE_TEXT_ENCODER(mldsa44_rsa2048_pss_sha256, composite);
-MAKE_TEXT_ENCODER(mldsa44_rsa2048_pkcs15_sha256, composite);
-MAKE_TEXT_ENCODER(mldsa44_ed25519_sha512, composite);
-MAKE_TEXT_ENCODER(mldsa44_ecdsa_p256_sha256, composite);
-MAKE_TEXT_ENCODER(mldsa65_rsa3072_pss_sha512, composite);
 MAKE_TEXT_ENCODER(mldsa65_rsa3072_pkcs15_sha512, composite);
-MAKE_TEXT_ENCODER(mldsa65_rsa4096_pss_sha512, composite);
-MAKE_TEXT_ENCODER(mldsa65_rsa4096_pkcs15_sha512, composite);
 MAKE_TEXT_ENCODER(mldsa65_ecdsa_p256_sha512, composite);
-MAKE_TEXT_ENCODER(mldsa65_ecdsa_p384_sha512, composite);
-MAKE_TEXT_ENCODER(mldsa65_ecdsa_brainpoolP256r1_sha512, composite);
-MAKE_TEXT_ENCODER(mldsa65_ed25519_sha512, composite);
-MAKE_TEXT_ENCODER(mldsa87_ecdsa_p384_sha512, composite);
-MAKE_TEXT_ENCODER(mldsa87_ecdsa_brainpoolP384r1_sha512, composite);
-MAKE_TEXT_ENCODER(mldsa87_ed448_shake256, composite);
-MAKE_TEXT_ENCODER(mldsa87_rsa3072_pss_sha512, composite);
-MAKE_TEXT_ENCODER(mldsa87_rsa4096_pss_sha512, composite);
-MAKE_TEXT_ENCODER(mldsa87_ecdsa_p521_sha512, composite);
 #endif /* OPENSSL_NO_COMPOSITE */

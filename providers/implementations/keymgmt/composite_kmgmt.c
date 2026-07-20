@@ -286,16 +286,6 @@ static void *composite_gen(void *genctx, int evp_type,
             goto err;
         if (EVP_PKEY_keygen(ctx, &key->classic_key) <= 0)
             goto err;
-    } else if (strcmp(classic_alg, "ED25519") == 0
-        || strcmp(classic_alg, "ED448") == 0) {
-        ctx = EVP_PKEY_CTX_new_from_name(PROV_LIBCTX_OF(gctx->provctx),
-            classic_alg, gctx->propq);
-        if (ctx == NULL)
-            goto err;
-        if (EVP_PKEY_keygen_init(ctx) <= 0)
-            goto err;
-        if (EVP_PKEY_keygen(ctx, &key->classic_key) <= 0)
-            goto err;
     } else {
         ERR_raise_data(ERR_LIB_PROV, PROV_R_NOT_SUPPORTED,
             "unsupported classic algorithm: %s", classic_alg);
@@ -391,8 +381,6 @@ static const OSSL_PARAM *composite_export_types(int selection)
  *   RSA:      RSAPublicKey DER (pub)  / RSAPrivateKey DER (priv)   — PKCS#1
  *   EC:       Uncompressed X9.62 point 0x04||x||y (pub)
  *             / ECPrivateKey DER with NamedCurve (priv)            — RFC5915
- *   Ed25519:  raw 32 bytes
- *   Ed448:    raw 57 bytes
  */
 static EVP_PKEY *composite_decode_classic_key(OSSL_LIB_CTX *libctx,
     const char *classic_alg,
@@ -467,22 +455,6 @@ static EVP_PKEY *composite_decode_classic_key(OSSL_LIB_CTX *libctx,
                 pkey = NULL;
             EVP_PKEY_CTX_free(pctx);
         }
-    } else if (strcmp(classic_alg, "ED25519") == 0) {
-        /* Raw 32-byte public or private key per RFC8032 */
-        if (include_priv)
-            pkey = EVP_PKEY_new_raw_private_key_ex(libctx, "ED25519", NULL,
-                buf, buf_len);
-        else
-            pkey = EVP_PKEY_new_raw_public_key_ex(libctx, "ED25519", NULL,
-                buf, buf_len);
-    } else if (strcmp(classic_alg, "ED448") == 0) {
-        /* Raw 57-byte public or private key per RFC8032 */
-        if (include_priv)
-            pkey = EVP_PKEY_new_raw_private_key_ex(libctx, "ED448", NULL,
-                buf, buf_len);
-        else
-            pkey = EVP_PKEY_new_raw_public_key_ex(libctx, "ED448", NULL,
-                buf, buf_len);
     }
 
     return pkey;
@@ -495,8 +467,8 @@ static EVP_PKEY *composite_decode_classic_key(OSSL_LIB_CTX *libctx,
  *   Public key:  mldsaPK(fixed size) || tradPK(raw)
  *   Private key: mldsaSeed(32 bytes) || tradSK(raw)
  *
- * classic_alg: "RSA", "EC", "ED25519", or "ED448"
- * ec_curve:    curve name for EC (e.g. "P-256"), NULL for non-EC
+ * classic_alg: "RSA" or "EC"
+ * ec_curve:    curve name for EC (e.g. "P-256")
  */
 static int composite_import_internal(void *keydata, int selection,
     const OSSL_PARAM params[],
@@ -573,8 +545,6 @@ static int composite_import_internal(void *keydata, int selection,
  *   RSA:      RSAPublicKey DER (pub)  / RSAPrivateKey DER (priv)   — PKCS#1
  *   EC:       Uncompressed X9.62 point 0x04||x||y (pub)
  *             / ECPrivateKey DER (priv)                            — RFC5915
- *   Ed25519:  raw 32 bytes
- *   Ed448:    raw 57 bytes
  *
  * On success, *out points to a newly-allocated buffer and *out_len holds its
  * length.  The caller must OPENSSL_free(*out) (or OPENSSL_clear_free for priv).
@@ -637,33 +607,6 @@ static int composite_encode_classic_key(const EVP_PKEY *pkey,
                     *out, len, out_len)) {
                 OPENSSL_free(*out);
                 *out = NULL;
-            }
-        }
-    } else if (keytype == EVP_PKEY_ED25519 || keytype == EVP_PKEY_ED448) {
-        /* Raw 32-byte (Ed25519) or 57-byte (Ed448) key per RFC8032 */
-        if (include_priv) {
-            if (!EVP_PKEY_get_raw_private_key(pkey, NULL, &len))
-                return 0;
-            *out = OPENSSL_malloc(len);
-            if (*out == NULL)
-                return 0;
-            if (!EVP_PKEY_get_raw_private_key(pkey, *out, &len)) {
-                OPENSSL_free(*out);
-                *out = NULL;
-            } else {
-                *out_len = len;
-            }
-        } else {
-            if (!EVP_PKEY_get_raw_public_key(pkey, NULL, &len))
-                return 0;
-            *out = OPENSSL_malloc(len);
-            if (*out == NULL)
-                return 0;
-            if (!EVP_PKEY_get_raw_public_key(pkey, *out, &len)) {
-                OPENSSL_free(*out);
-                *out = NULL;
-            } else {
-                *out_len = len;
             }
         }
     } else {
@@ -891,21 +834,5 @@ err:
     }
 
 /* alg                                  ml_dsa_evp_type    classic_alg  bits  ec_curve          */
-MAKE_KEYMGMT_FUNCTIONS(mldsa44_rsa2048_pss_sha256, EVP_PKEY_ML_DSA_44, "RSA", 2048, NULL);
-MAKE_KEYMGMT_FUNCTIONS(mldsa44_rsa2048_pkcs15_sha256, EVP_PKEY_ML_DSA_44, "RSA", 2048, NULL);
-MAKE_KEYMGMT_FUNCTIONS(mldsa44_ed25519_sha512, EVP_PKEY_ML_DSA_44, "ED25519", 0, NULL);
-MAKE_KEYMGMT_FUNCTIONS(mldsa44_ecdsa_p256_sha256, EVP_PKEY_ML_DSA_44, "EC", 256, "P-256");
-MAKE_KEYMGMT_FUNCTIONS(mldsa65_rsa3072_pss_sha512, EVP_PKEY_ML_DSA_65, "RSA", 3072, NULL);
 MAKE_KEYMGMT_FUNCTIONS(mldsa65_rsa3072_pkcs15_sha512, EVP_PKEY_ML_DSA_65, "RSA", 3072, NULL);
-MAKE_KEYMGMT_FUNCTIONS(mldsa65_rsa4096_pss_sha512, EVP_PKEY_ML_DSA_65, "RSA", 4096, NULL);
-MAKE_KEYMGMT_FUNCTIONS(mldsa65_rsa4096_pkcs15_sha512, EVP_PKEY_ML_DSA_65, "RSA", 4096, NULL);
 MAKE_KEYMGMT_FUNCTIONS(mldsa65_ecdsa_p256_sha512, EVP_PKEY_ML_DSA_65, "EC", 256, "P-256");
-MAKE_KEYMGMT_FUNCTIONS(mldsa65_ecdsa_p384_sha512, EVP_PKEY_ML_DSA_65, "EC", 384, "P-384");
-MAKE_KEYMGMT_FUNCTIONS(mldsa65_ecdsa_brainpoolP256r1_sha512, EVP_PKEY_ML_DSA_65, "EC", 256, "brainpoolP256r1");
-MAKE_KEYMGMT_FUNCTIONS(mldsa65_ed25519_sha512, EVP_PKEY_ML_DSA_65, "ED25519", 0, NULL);
-MAKE_KEYMGMT_FUNCTIONS(mldsa87_ecdsa_p384_sha512, EVP_PKEY_ML_DSA_87, "EC", 384, "P-384");
-MAKE_KEYMGMT_FUNCTIONS(mldsa87_ecdsa_brainpoolP384r1_sha512, EVP_PKEY_ML_DSA_87, "EC", 384, "brainpoolP384r1");
-MAKE_KEYMGMT_FUNCTIONS(mldsa87_ed448_shake256, EVP_PKEY_ML_DSA_87, "ED448", 0, NULL);
-MAKE_KEYMGMT_FUNCTIONS(mldsa87_rsa3072_pss_sha512, EVP_PKEY_ML_DSA_87, "RSA", 3072, NULL);
-MAKE_KEYMGMT_FUNCTIONS(mldsa87_rsa4096_pss_sha512, EVP_PKEY_ML_DSA_87, "RSA", 4096, NULL);
-MAKE_KEYMGMT_FUNCTIONS(mldsa87_ecdsa_p521_sha512, EVP_PKEY_ML_DSA_87, "EC", 521, "P-521");
