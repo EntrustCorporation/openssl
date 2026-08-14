@@ -126,6 +126,12 @@ push @files, qw(
                 evppkey_ml_dsa_87_wycheproof_sign.txt
                 evppkey_ml_dsa_87_wycheproof_verify.txt
                ) unless $no_ml_dsa;
+my $no_composite = disabled("composite");
+push @files, qw(
+                evppkey_composite_keygen.txt
+                evppkey_composite_siggen.txt
+                evppkey_composite_sigver.txt
+               ) unless $no_composite;
 push @files, qw(
                 evppkey_ml_kem_512_keygen.txt
                 evppkey_ml_kem_512_encap.txt

@@ -35,6 +35,8 @@ typedef struct {
     /* Algorithm-specific constants are passed directly to composite_gen()
      * from the per-algorithm wrapper in MAKE_KEYMGMT_FUNCTIONS; they are
      * compile-time literals and do not need to live in the context. */
+    uint8_t *priv_seed; /* optional: mldsaSeed||tradSK for deterministic gen */
+    size_t priv_seed_len;
 } COMPOSITE_GEN_CTX;
 
 /* Forward declarations of all static keymgmt functions */
@@ -135,25 +137,12 @@ static int ossl_composite_key_get_max_size(const COMPOSITE_KEY *key)
     return (int)ml_dsa_sig + (classic_sig > 0 ? classic_sig : 0);
 }
 
-/*
- * The composite public and private key bytes are not stored as a contiguous
- * pre-assembled buffer inside COMPOSITE_KEY; use composite_export() for full
- * serialization.  These stubs let composite_get_params() skip the pub/priv
- * params gracefully when the buffer is not available.
- */
-static const uint8_t *ossl_composite_key_get_priv(const COMPOSITE_KEY *key,
-    size_t *len)
-{
-    *len = 0;
-    return NULL;
-}
-
-static const uint8_t *ossl_composite_key_get_pub(const COMPOSITE_KEY *key,
-    size_t *len)
-{
-    *len = 0;
-    return NULL;
-}
+/* Forward declarations for helpers defined later in this file */
+static int composite_encode_classic_key(const EVP_PKEY *pkey, int include_priv,
+    unsigned char **out, size_t *out_len);
+static EVP_PKEY *composite_decode_classic_key(OSSL_LIB_CTX *libctx,
+    const char *classic_alg, const char *ec_curve, int include_priv,
+    const unsigned char *buf, size_t buf_len);
 
 COMPOSITE_KEY *ossl_prov_composite_new(PROV_CTX *ctx, const char *propq,
     int ml_dsa_evp_type)
@@ -207,6 +196,7 @@ static void composite_gen_cleanup(void *genctx)
     if (gctx == NULL)
         return;
 
+    OPENSSL_secure_clear_free(gctx->priv_seed, gctx->priv_seed_len);
     OPENSSL_free(gctx->propq);
     OPENSSL_free(gctx);
 }
@@ -224,6 +214,20 @@ static int composite_gen_set_params(void *genctx, const OSSL_PARAM params[])
 
     if (gctx == NULL || !composite_gen_set_params_decoder(params, &p))
         return 0;
+
+    if (p.privkey != NULL) {
+        const void *seed_ptr;
+        size_t seed_len;
+
+        if (!OSSL_PARAM_get_octet_string_ptr(p.privkey, &seed_ptr, &seed_len))
+            return 0;
+        OPENSSL_secure_clear_free(gctx->priv_seed, gctx->priv_seed_len);
+        gctx->priv_seed = OPENSSL_secure_malloc(seed_len);
+        if (gctx->priv_seed == NULL)
+            return 0;
+        memcpy(gctx->priv_seed, seed_ptr, seed_len);
+        gctx->priv_seed_len = seed_len;
+    }
 
     if (p.propq != NULL) {
         OPENSSL_free(gctx->propq);
@@ -253,12 +257,32 @@ static void *composite_gen(void *genctx, int evp_type,
     if (key->ml_dsa_key == NULL)
         goto err;
 
-    if (!ossl_ml_dsa_generate_key(key->ml_dsa_key)) {
+    if (gctx->priv_seed_len != 0) {
+        /*
+         * Deterministic keygen: caller supplied mldsaSeed(32) || tradSK.
+         * Expand the ML-DSA seed and import the classic private key directly.
+         */
+        if (gctx->priv_seed_len <= ML_DSA_SEED_BYTES) {
+            ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_SEED_LENGTH);
+            goto err;
+        }
+        if (!ossl_ml_dsa_set_prekey(key->ml_dsa_key, 0, 0,
+                gctx->priv_seed, ML_DSA_SEED_BYTES, NULL, 0))
+            goto err;
+        if (!ossl_ml_dsa_generate_key(key->ml_dsa_key)) {
+            ERR_raise(ERR_LIB_PROV, PROV_R_FAILED_TO_GENERATE_KEY);
+            goto err;
+        }
+        key->classic_key = composite_decode_classic_key(
+            PROV_LIBCTX_OF(gctx->provctx), classic_alg, ec_curve, 1,
+            gctx->priv_seed + ML_DSA_SEED_BYTES,
+            gctx->priv_seed_len - ML_DSA_SEED_BYTES);
+        if (key->classic_key == NULL)
+            goto err;
+    } else if (!ossl_ml_dsa_generate_key(key->ml_dsa_key)) {
         ERR_raise(ERR_LIB_PROV, PROV_R_FAILED_TO_GENERATE_KEY);
         goto err;
-    }
-
-    if (strcmp(classic_alg, "RSA") == 0) {
+    } else if (strcmp(classic_alg, "RSA") == 0) {
         unsigned int rsa_bits = (unsigned int)classic_bits;
         OSSL_PARAM rsa_params[2];
 
@@ -318,8 +342,6 @@ static const OSSL_PARAM *composite_gettable_params(void *provctx)
 static int composite_get_params(void *keydata, OSSL_PARAM params[])
 {
     COMPOSITE_KEY *key = keydata;
-    const uint8_t *d;
-    size_t len;
     struct composite_get_params_st p;
 
     if (key == NULL || !composite_get_params_decoder(params, &p))
@@ -335,14 +357,57 @@ static int composite_get_params(void *keydata, OSSL_PARAM params[])
         return 0;
 
     if (p.privkey != NULL) {
-        d = ossl_composite_key_get_priv(key, &len);
-        if (d != NULL && !OSSL_PARAM_set_octet_string(p.privkey, d, len))
+        /* Build mldsaSeed(32) || tradSK from the composite key */
+        const uint8_t *ml_dsa_seed = ossl_ml_dsa_key_get_seed(key->ml_dsa_key);
+        unsigned char *classic_priv = NULL;
+        size_t classic_priv_len = 0;
+        unsigned char *priv_buf = NULL;
+        size_t priv_len;
+        int ok = 0;
+
+        if (ml_dsa_seed == NULL || key->classic_key == NULL)
+            return 0;
+        if (!composite_encode_classic_key(key->classic_key, 1,
+                &classic_priv, &classic_priv_len))
+            return 0;
+        priv_len = ML_DSA_SEED_BYTES + classic_priv_len;
+        priv_buf = OPENSSL_secure_malloc(priv_len);
+        if (priv_buf != NULL) {
+            memcpy(priv_buf, ml_dsa_seed, ML_DSA_SEED_BYTES);
+            memcpy(priv_buf + ML_DSA_SEED_BYTES, classic_priv, classic_priv_len);
+            ok = OSSL_PARAM_set_octet_string(p.privkey, priv_buf, priv_len);
+            OPENSSL_secure_clear_free(priv_buf, priv_len);
+        }
+        OPENSSL_clear_free(classic_priv, classic_priv_len);
+        if (!ok)
             return 0;
     }
 
     if (p.pubkey != NULL) {
-        d = ossl_composite_key_get_pub(key, &len);
-        if (d != NULL && !OSSL_PARAM_set_octet_string(p.pubkey, d, len))
+        /* Build mldsaPK || tradPK from the composite key */
+        const ML_DSA_PARAMS *kp = ossl_ml_dsa_key_params(key->ml_dsa_key);
+        const uint8_t *ml_dsa_pub = ossl_ml_dsa_key_get_pub(key->ml_dsa_key);
+        unsigned char *classic_pub = NULL;
+        size_t classic_pub_len = 0;
+        unsigned char *pub_buf = NULL;
+        size_t pub_len;
+        int ok = 0;
+
+        if (ml_dsa_pub == NULL || key->classic_key == NULL)
+            return 0;
+        if (!composite_encode_classic_key(key->classic_key, 0,
+                &classic_pub, &classic_pub_len))
+            return 0;
+        pub_len = kp->pk_len + classic_pub_len;
+        pub_buf = OPENSSL_malloc(pub_len);
+        if (pub_buf != NULL) {
+            memcpy(pub_buf, ml_dsa_pub, kp->pk_len);
+            memcpy(pub_buf + kp->pk_len, classic_pub, classic_pub_len);
+            ok = OSSL_PARAM_set_octet_string(p.pubkey, pub_buf, pub_len);
+            OPENSSL_free(pub_buf);
+        }
+        OPENSSL_free(classic_pub);
+        if (!ok)
             return 0;
     }
 
@@ -429,9 +494,11 @@ static EVP_PKEY *composite_decode_classic_key(OSSL_LIB_CTX *libctx,
     } else if (strcmp(classic_alg, "EC") == 0) {
         if (include_priv) {
             /*
-             * ECPrivateKey DER (RFC5915) with embedded NamedCurve.
-             * The "type-specific" OSSL_DECODER for EC handles this via
-             * d2i_ECPrivateKey.
+             * ECPrivateKey DER (RFC5915): SEQUENCE { INTEGER 1,
+             *   OCTET STRING <d>, [0] namedCurve OID }.
+             * OSSL_DECODER handles this natively and preserves the
+             * "no explicit public key" flag so that re-encoding produces
+             * the same compact form without [1] publicKey.
              */
             ptr = buf;
             ptrlen = buf_len;
@@ -461,7 +528,8 @@ static EVP_PKEY *composite_decode_classic_key(OSSL_LIB_CTX *libctx,
                 return NULL;
             if (EVP_PKEY_fromdata_init(pctx) <= 0
                 || EVP_PKEY_fromdata(pctx, &pkey,
-                       OSSL_KEYMGMT_SELECT_PUBLIC_KEY,
+                       OSSL_KEYMGMT_SELECT_PUBLIC_KEY
+                           | OSSL_KEYMGMT_SELECT_ALL_PARAMETERS,
                        params)
                     <= 0)
                 pkey = NULL;
@@ -522,9 +590,21 @@ static int composite_import_internal(void *keydata, int selection,
     kp = ossl_ml_dsa_key_params(key->ml_dsa_key);
     libctx = ossl_ml_dsa_key_get0_libctx(key->ml_dsa_key);
 
-    /* 1. Extract the combined octet string (ml_dsa_bytes || classic_bytes) */
+    /* 1. Extract the combined octet string (ml_dsa_bytes || classic_bytes).
+     *
+     * EVP_PKEY_new_raw_public_key_ex() calls EVP_PKEY_fromdata() with
+     * EVP_PKEY_KEYPAIR as the selection but only provides PUB_KEY in params.
+     * Fall back to PUB_KEY when the caller asked for private but only supplied
+     * a public-key blob.
+     */
     pname = include_priv ? OSSL_PKEY_PARAM_PRIV_KEY : OSSL_PKEY_PARAM_PUB_KEY;
     p = OSSL_PARAM_locate_const(params, pname);
+    if (p == NULL && include_priv) {
+        /* No private key in params — try loading as public key only */
+        include_priv = 0;
+        pname = OSSL_PKEY_PARAM_PUB_KEY;
+        p = OSSL_PARAM_locate_const(params, pname);
+    }
     if (p == NULL
         || !OSSL_PARAM_get_octet_string_ptr(p, (const void **)&buf, &buf_len))
         return 0;
@@ -609,12 +689,13 @@ static int composite_encode_classic_key(const EVP_PKEY *pkey,
     } else if (keytype == EVP_PKEY_EC) {
         if (include_priv) {
             /*
-             * ECPrivateKey DER (RFC5915) with NamedCurve.
-             * OSSL_ENCODER "type-specific" uses i2d_ECPrivateKey.
+             * ECPrivateKey DER (RFC5915) — type-specific encoding.
+             * Keys imported via OSSL_DECODER preserve the original
+             * "no [1] publicKey" flag, so the encoder reproduces the same
+             * compact form (matching the IETF composite wire format).
              */
             ectx = OSSL_ENCODER_CTX_new_for_pkey(
-                pkey,
-                OSSL_KEYMGMT_SELECT_PRIVATE_KEY,
+                pkey, OSSL_KEYMGMT_SELECT_PRIVATE_KEY,
                 "DER", "type-specific", NULL);
             if (ectx == NULL)
                 return 0;
