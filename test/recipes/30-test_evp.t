@@ -128,11 +128,6 @@ push @files, qw(
                ) unless $no_ml_dsa;
 my $no_composite = disabled("composite");
 push @files, qw(
-                evppkey_composite_keygen.txt
-                evppkey_composite_siggen.txt
-                evppkey_composite_sigver.txt
-               ) unless $no_composite;
-push @files, qw(
                 evppkey_ml_kem_512_keygen.txt
                 evppkey_ml_kem_512_encap.txt
                 evppkey_ml_kem_512_decap.txt
@@ -193,6 +188,12 @@ push @defltfiles, qw(evppkey_brainpool.txt) unless $no_ec;
 push @defltfiles, qw(evppkey_ecx_kem.txt) unless $no_ecx;
 push @defltfiles, qw(evppkey_dsa_rfc6979.txt) unless ($no_dsa || $no_determinstic_nonce);
 push @defltfiles, qw(evppkey_sm2.txt) unless $no_sm2;
+# Composite algorithms are not in the FIPS provider — default provider only
+push @defltfiles, qw(
+                      evppkey_composite_keygen.txt
+                      evppkey_composite_siggen.txt
+                      evppkey_composite_sigver.txt
+                     ) unless $no_composite;
 push @defltfiles, qw(evpciph_aes_gcm_siv.txt) unless $no_siv;
 push @defltfiles, qw(evpciph_aes_siv.txt) unless $no_siv;
 push @defltfiles, qw(evpkdf_argon2.txt) unless $no_argon2;
