@@ -7,21 +7,6 @@
  * https://www.openssl.org/source/license.html
  */
 
-/*
- * Tests for composite signature algorithms (draft-ietf-lamps-pq-composite-sigs).
- *
- * Three testing strategies mirror the ML-DSA test suite:
- *
- *  1. DRBG round-trip  — keygen via DRBG, sign, verify (all 18 algorithms).
- *     Tests live in this file.
- *
- *  2. Deterministic vectors — self-generated vectors in composite_sig.inc,
- *     checked via siggen/sigver tests.
- *
- *  3. EVP data-driven — test/recipes/30-test_evp_data/evppkey_composite_sig*.txt
- *     parsed by evp_test.c, driven by recipes/30-test_evp.t.
- */
-
 #include <openssl/core_names.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -121,7 +106,7 @@ static EVP_PKEY *composite_key_from_pub(const char *alg,
 #endif /* COMPOSITE_SIGVER_TESTDATA_COUNT > 0 */
 
 /* =========================================================================
- * Strategy 1 — DRBG round-trip tests (keygen → sign → verify)
+ *  DRBG round-trip tests (keygen → sign → verify)
  * ========================================================================= */
 
 /*
@@ -196,7 +181,7 @@ static const char *composite_alg_names[] = {
 static uint8_t test_msg[] = "OpenSSL composite signature test message";
 
 /*
- * Strategy 1: DRBG keygen + sign + verify for each of the 18 algorithms.
+ * DRBG keygen + sign + verify for each of the 18 algorithms.
  * Parameterised by tst_id (0..17).
  */
 static int composite_drbg_sign_verify_test(int tst_id)
@@ -205,6 +190,18 @@ static int composite_drbg_sign_verify_test(int tst_id)
     const char *alg = composite_alg_names[tst_id];
     EVP_PKEY *key = NULL;
 
+#ifdef OPENSSL_NO_EC
+    if (strstr(alg, "ECDSA") != NULL) {
+        TEST_note("Skipping %s - EC not available", alg);
+        return 1;
+    }
+#endif
+#ifdef OPENSSL_NO_ECX
+    if (strstr(alg, "Ed25519") != NULL || strstr(alg, "Ed448") != NULL) {
+        TEST_note("Skipping %s - ECX (Ed25519/Ed448) not available", alg);
+        return 1;
+    }
+#endif
     if (!TEST_ptr(key = do_gen_key(alg)))
         goto err;
 
@@ -218,7 +215,7 @@ err:
 }
 
 /*
- * Strategy 1: two DRBG-generated keys of the same algorithm must not be equal.
+ * Two DRBG-generated keys of the same algorithm must not be equal.
  * Two keys of different algorithms must return -1 (incompatible types).
  * Checks EVP_PKEY_eq() and EVP_PKEY_dup() round-trips.
  */
@@ -227,6 +224,10 @@ static int composite_keygen_drbg_test(void)
     int ret = 0;
     EVP_PKEY *k1 = NULL, *k2 = NULL, *k3 = NULL, *k1_dup = NULL;
 
+#ifdef OPENSSL_NO_ECX
+    TEST_note("Skipping composite_keygen_drbg_test - requires ECX (Ed25519)");
+    return 1;
+#endif
     if (!TEST_ptr(k1 = do_gen_key("ML-DSA-44-Ed25519-SHA512"))
         || !TEST_ptr(k2 = do_gen_key("ML-DSA-44-Ed25519-SHA512"))
         || !TEST_ptr(k3 = do_gen_key("ML-DSA-44-RSA2048-PSS-SHA256"))
@@ -249,7 +250,7 @@ err:
 }
 
 /* =========================================================================
- * Strategy 2 — Deterministic vector tests (composite_sig.inc)
+ * Deterministic vector tests (composite_sig.inc)
  * ========================================================================= */
 
 /*
@@ -264,6 +265,13 @@ static int composite_siggen_test(int tst_id)
     int ret = 0;
     const COMPOSITE_SIG_GEN_TEST_DATA *td = &composite_siggen_testdata[tst_id];
     EVP_PKEY_CTX *sctx = NULL;
+
+#ifdef OPENSSL_NO_ECX
+    if (strstr(td->alg, "Ed25519") != NULL || strstr(td->alg, "Ed448") != NULL) {
+        TEST_note("Skipping %s - ECX (Ed25519/Ed448) not available", td->alg);
+        return 1;
+    }
+#endif
     EVP_PKEY *pkey = NULL;
     EVP_SIGNATURE *sig_alg = NULL;
     OSSL_PARAM params[2], *p = params;
@@ -413,6 +421,18 @@ static int composite_tampered_sig_test(int tst_id)
     uint8_t *sig = NULL;
     size_t sig_len = 0;
 
+#ifdef OPENSSL_NO_EC
+    if (strstr(alg, "ECDSA") != NULL) {
+        TEST_note("Skipping %s - EC not available", alg);
+        return 1;
+    }
+#endif
+#ifdef OPENSSL_NO_ECX
+    if (strstr(alg, "Ed25519") != NULL || strstr(alg, "Ed448") != NULL) {
+        TEST_note("Skipping %s - ECX (Ed25519/Ed448) not available", alg);
+        return 1;
+    }
+#endif
     if (!TEST_ptr(key = do_gen_key(alg))
         || !TEST_ptr(sctx = EVP_PKEY_CTX_new_from_pkey(lib_ctx, key, NULL))
         || !TEST_ptr(sig_alg = EVP_SIGNATURE_fetch(lib_ctx, alg, NULL))
