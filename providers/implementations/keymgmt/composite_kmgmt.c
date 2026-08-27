@@ -310,6 +310,9 @@ static void *composite_gen(void *genctx, int evp_type,
             goto err;
         if (EVP_PKEY_keygen(ctx, &key->classic_key) <= 0)
             goto err;
+        /* composite draft requires ECPrivateKey without publicKey field */
+        EVP_PKEY_set_int_param(key->classic_key,
+            OSSL_PKEY_PARAM_EC_INCLUDE_PUBLIC, 0);
     } else if (strcmp(classic_alg, "ED25519") == 0
         || strcmp(classic_alg, "ED448") == 0) {
         ctx = EVP_PKEY_CTX_new_from_name(PROV_LIBCTX_OF(gctx->provctx),
@@ -470,7 +473,7 @@ static EVP_PKEY *composite_decode_classic_key(OSSL_LIB_CTX *libctx,
     const unsigned char *ptr;
     size_t ptrlen;
     OSSL_DECODER_CTX *dctx;
-    OSSL_PARAM params[3];
+    OSSL_PARAM params[4];
     EVP_PKEY_CTX *pctx;
 
     if (strcmp(classic_alg, "RSA") == 0) {
@@ -493,24 +496,20 @@ static EVP_PKEY *composite_decode_classic_key(OSSL_LIB_CTX *libctx,
         OSSL_DECODER_CTX_free(dctx);
     } else if (strcmp(classic_alg, "EC") == 0) {
         if (include_priv) {
-            /*
-             * ECPrivateKey DER (RFC5915): SEQUENCE { INTEGER 1,
-             *   OCTET STRING <d>, [0] namedCurve OID }.
-             * OSSL_DECODER handles this natively and preserves the
-             * "no explicit public key" flag so that re-encoding produces
-             * the same compact form without [1] publicKey.
-             */
             ptr = buf;
             ptrlen = buf_len;
             dctx = OSSL_DECODER_CTX_new_for_pkey(
                 &pkey, "DER", "type-specific", "EC",
-                OSSL_KEYMGMT_SELECT_PRIVATE_KEY,
-                libctx, NULL);
+                OSSL_KEYMGMT_SELECT_PRIVATE_KEY, libctx, NULL);
             if (dctx == NULL)
                 return NULL;
             if (!OSSL_DECODER_from_data(dctx, &ptr, &ptrlen))
                 pkey = NULL;
             OSSL_DECODER_CTX_free(dctx);
+            /* composite draft requires ECPrivateKey without publicKey field */
+            if (pkey != NULL)
+                EVP_PKEY_set_int_param(pkey,
+                    OSSL_PKEY_PARAM_EC_INCLUDE_PUBLIC, 0);
         } else {
             /*
              * Uncompressed X9.62 public key point: 0x04 || x || y.
@@ -688,15 +687,8 @@ static int composite_encode_classic_key(const EVP_PKEY *pkey,
         OSSL_ENCODER_CTX_free(ectx);
     } else if (keytype == EVP_PKEY_EC) {
         if (include_priv) {
-            /*
-             * ECPrivateKey DER (RFC5915) — type-specific encoding.
-             * Keys imported via OSSL_DECODER preserve the original
-             * "no [1] publicKey" flag, so the encoder reproduces the same
-             * compact form (matching the IETF composite wire format).
-             */
             ectx = OSSL_ENCODER_CTX_new_for_pkey(
-                pkey, OSSL_KEYMGMT_SELECT_PRIVATE_KEY,
-                "DER", "type-specific", NULL);
+                pkey, OSSL_KEYMGMT_SELECT_ALL, "DER", "type-specific", NULL);
             if (ectx == NULL)
                 return 0;
             if (!OSSL_ENCODER_to_data(ectx, out, out_len))
