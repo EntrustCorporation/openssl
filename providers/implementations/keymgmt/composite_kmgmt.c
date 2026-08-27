@@ -253,10 +253,6 @@ static void *composite_gen(void *genctx, int evp_type,
     if (key == NULL)
         return NULL;
 
-    key->ml_dsa_key = ossl_prov_ml_dsa_new(gctx->provctx, gctx->propq, evp_type);
-    if (key->ml_dsa_key == NULL)
-        goto err;
-
     if (gctx->priv_seed_len != 0) {
         /*
          * Deterministic keygen: caller supplied mldsaSeed(32) || tradSK.

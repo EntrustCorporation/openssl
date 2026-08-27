@@ -23,13 +23,16 @@ plan skip_all => 'Composite signatures are not supported in this build'
     if disabled('composite');
 
 my $no_fips = disabled('fips') || ($ENV{NO_FIPS} // 0);
-my $no_ecx  = disabled('ecx');
+my $no_ec   = disabled('ec');
+my $no_ecx  = $no_ec || disabled('ecx');
 my $provconf = srctop_file("test", "fips-and-base.cnf");
 
 # 1 C test run + 1 FIPS skip + 1 require_ok
-# + N × 2 tconversion subtests (N = 18 normally, 15 when no-ecx removes
-# ML-DSA-44-Ed25519, ML-DSA-65-Ed25519, ML-DSA-87-Ed448)
-plan tests => $no_ecx ? 33 : 39;
+# + N × 2 tconversion subtests:
+#   no-ec  removes 7 ECDSA + 3 ECX → 8 RSA remain → 19
+#   no-ecx removes 3 ECX           → 15 remain    → 33
+#   default: 18 composites                         → 39
+plan tests => $no_ec ? 19 : $no_ecx ? 33 : 39;
 
 # ─── C unit test binary ──────────────────────────────────────────────────────
 ok(run(test(["composite_sig_test"])), "running composite_sig_test");
@@ -69,6 +72,7 @@ my @composite_pems = (
     [ "ML-DSA-87-RSA4096-PSS-SHA512",           "testcomposite87-rsa4096pss"             ],
     [ "ML-DSA-87-ECDSA-P521-SHA512",            "testcomposite87-ecdsa-p521"             ],
 );
+@composite_pems = grep { $_->[0] !~ /ECDSA/ }         @composite_pems if $no_ec;
 @composite_pems = grep { $_->[0] !~ /Ed25519|Ed448/ } @composite_pems if $no_ecx;
 
 foreach my $entry (@composite_pems) {
