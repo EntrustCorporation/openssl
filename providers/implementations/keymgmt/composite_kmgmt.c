@@ -462,6 +462,60 @@ static const OSSL_PARAM *composite_export_types(int selection)
  *   Ed25519:  raw 32 bytes
  *   Ed448:    raw 57 bytes
  */
+/* Extract the privateKey OCTET STRING content from an RFC 5915 ECPrivateKey DER. */
+static const unsigned char *rfc5915_extract_privkey(const unsigned char *buf,
+    size_t buf_len, size_t *priv_len)
+{
+    const unsigned char *p = buf;
+    const unsigned char *end = buf + buf_len;
+    size_t seq_len, key_len;
+
+    /* Outer SEQUENCE tag */
+    if (p >= end || *p++ != 0x30)
+        return NULL;
+    /* DER length of SEQUENCE content */
+    if (p >= end)
+        return NULL;
+    if (*p & 0x80) {
+        int nb = (int)(*p++ & 0x7f);
+        if (nb == 0 || nb > 4 || p + nb > end)
+            return NULL;
+        seq_len = 0;
+        while (nb--)
+            seq_len = (seq_len << 8) | (unsigned char)*p++;
+    } else {
+        seq_len = (unsigned char)*p++;
+    }
+    if ((size_t)(end - p) < seq_len)
+        return NULL;
+    end = p + seq_len;
+
+    /* version: 02 01 01 */
+    if (end - p < 3 || p[0] != 0x02 || p[1] != 0x01 || p[2] != 0x01)
+        return NULL;
+    p += 3;
+
+    /* privateKey OCTET STRING: 04 <len> <bytes> */
+    if (p >= end || *p++ != 0x04)
+        return NULL;
+    if (p >= end)
+        return NULL;
+    if (*p & 0x80) {
+        int nb = (int)(*p++ & 0x7f);
+        if (nb == 0 || nb > 2 || p + nb > end)
+            return NULL;
+        key_len = 0;
+        while (nb--)
+            key_len = (key_len << 8) | (unsigned char)*p++;
+    } else {
+        key_len = (unsigned char)*p++;
+    }
+    if ((size_t)(end - p) < key_len)
+        return NULL;
+    *priv_len = key_len;
+    return p;
+}
+
 static EVP_PKEY *composite_decode_classic_key(OSSL_LIB_CTX *libctx,
     const char *classic_alg,
     const char *ec_curve,
@@ -496,16 +550,60 @@ static EVP_PKEY *composite_decode_classic_key(OSSL_LIB_CTX *libctx,
         OSSL_DECODER_CTX_free(dctx);
     } else if (strcmp(classic_alg, "EC") == 0) {
         if (include_priv) {
+            /* Try the standard decoder first; fall back to manual RFC 5915
+             * parsing on targets where the decoder chain is unavailable. */
             ptr = buf;
             ptrlen = buf_len;
             dctx = OSSL_DECODER_CTX_new_for_pkey(
                 &pkey, "DER", "type-specific", "EC",
                 OSSL_KEYMGMT_SELECT_PRIVATE_KEY, libctx, NULL);
-            if (dctx == NULL)
-                return NULL;
-            if (!OSSL_DECODER_from_data(dctx, &ptr, &ptrlen))
-                pkey = NULL;
-            OSSL_DECODER_CTX_free(dctx);
+            if (dctx != NULL) {
+                if (!OSSL_DECODER_from_data(dctx, &ptr, &ptrlen))
+                    pkey = NULL;
+                OSSL_DECODER_CTX_free(dctx);
+            }
+            if (pkey == NULL) {
+                const unsigned char *priv_bytes;
+                size_t priv_len;
+                BIGNUM *priv_bn = NULL;
+                OSSL_PARAM_BLD *bld = NULL;
+                OSSL_PARAM *built = NULL;
+
+                ERR_clear_error();
+                priv_bytes = rfc5915_extract_privkey(buf, buf_len, &priv_len);
+                if (priv_bytes == NULL)
+                    return NULL;
+
+                priv_bn = BN_bin2bn(priv_bytes, (int)priv_len, NULL);
+                bld = priv_bn != NULL ? OSSL_PARAM_BLD_new() : NULL;
+                if (bld == NULL
+                    || !OSSL_PARAM_BLD_push_utf8_string(bld,
+                        OSSL_PKEY_PARAM_GROUP_NAME, ec_curve, 0)
+                    || !OSSL_PARAM_BLD_push_BN(bld,
+                        OSSL_PKEY_PARAM_PRIV_KEY, priv_bn)
+                    || (built = OSSL_PARAM_BLD_to_param(bld)) == NULL) {
+                    OSSL_PARAM_BLD_free(bld);
+                    BN_free(priv_bn);
+                    return NULL;
+                }
+                OSSL_PARAM_BLD_free(bld);
+                BN_free(priv_bn);
+
+                pctx = EVP_PKEY_CTX_new_from_name(libctx, "EC", NULL);
+                if (pctx == NULL) {
+                    OSSL_PARAM_free(built);
+                    return NULL;
+                }
+                if (EVP_PKEY_fromdata_init(pctx) <= 0
+                    || EVP_PKEY_fromdata(pctx, &pkey,
+                           OSSL_KEYMGMT_SELECT_PRIVATE_KEY
+                               | OSSL_KEYMGMT_SELECT_DOMAIN_PARAMETERS,
+                           built)
+                        <= 0)
+                    pkey = NULL;
+                EVP_PKEY_CTX_free(pctx);
+                OSSL_PARAM_free(built);
+            }
             /* composite draft requires ECPrivateKey without publicKey field */
             if (pkey != NULL)
                 EVP_PKEY_set_int_param(pkey,
