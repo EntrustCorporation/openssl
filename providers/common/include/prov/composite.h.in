@@ -39,6 +39,14 @@ typedef struct {
     size_t oid_sz;
     uint8_t context_string[255]; /* ML_DSA_MAX_CONTEXT_STRING_LEN */
     size_t context_string_len;
+    /*
+     * Optional fixed entropy for the ML-DSA randomizer (test use only).
+     * When test_entropy_len != 0 the 32-byte value is used instead of
+     * RAND_priv_bytes_ex, enabling deterministic signing for test vectors.
+     * Mirrors OSSL_SIGNATURE_PARAM_TEST_ENTROPY in ml_dsa_sig.c.
+     */
+    uint8_t test_entropy[ML_DSA_ENTROPY_LEN];
+    size_t test_entropy_len;
     const char *prehash_alg;
     size_t prehash_len;
 

@@ -230,8 +230,12 @@ static int composite_sign(void *vctx, uint8_t *sig, size_t *siglen, size_t sigsi
     memcpy(tbs + offset, prehash, info->prehash_len);
 
     /* ML-DSA component: pure ML-DSA on M', with Label as mldsa_ctx per §3.1 */
-    if (RAND_priv_bytes_ex(ctx->libctx, rnd, sizeof(rnd), 0) <= 0)
+    if (ctx->test_entropy_len != 0) {
+        /* Fixed entropy for deterministic test vectors (non-PSS algorithms). */
+        memcpy(rnd, ctx->test_entropy, sizeof(rnd));
+    } else if (RAND_priv_bytes_ex(ctx->libctx, rnd, sizeof(rnd), 0) <= 0) {
         goto err;
+    }
 
     ml_dsa_siglen = ml_dsa_sig_max;
     if (!ossl_ml_dsa_sign(ctx->key->ml_dsa_key, 0,
@@ -260,6 +264,7 @@ static void composite_freectx(void *vctx)
 {
     PROV_COMPOSITE_CTX *ctx = (PROV_COMPOSITE_CTX *)vctx;
 
+    OPENSSL_cleanse(ctx->test_entropy, sizeof(ctx->test_entropy));
     OPENSSL_free(ctx);
 }
 
@@ -271,6 +276,8 @@ static void *composite_dupctx(void *vctx)
     dst = OPENSSL_memdup(src, sizeof(*src));
     return dst;
 }
+
+static int composite_set_ctx_params(void *vctx, const OSSL_PARAM params[]);
 
 static int composite_sign_init(void *vctx, void *vkey, const OSSL_PARAM params[])
 {
@@ -293,7 +300,7 @@ static int composite_sign_init(void *vctx, void *vkey, const OSSL_PARAM params[]
     ctx->prehash_alg = info->prehash_alg;
     ctx->prehash_len = info->prehash_len;
 
-    return 1;
+    return composite_set_ctx_params(ctx, params);
 }
 
 static int composite_verify_init(void *vctx, void *vkey, const OSSL_PARAM params[])
@@ -473,6 +480,20 @@ static int composite_set_ctx_params(void *vctx, const OSSL_PARAM params[])
         if (!OSSL_PARAM_get_octet_string(p.ctx, &vp, sizeof(ctx->context_string),
                 &ctx->context_string_len)) {
             ctx->context_string_len = 0;
+            return 0;
+        }
+    }
+
+    if (p.ent != NULL) {
+        void *vp = ctx->test_entropy;
+
+        ctx->test_entropy_len = 0;
+        if (!OSSL_PARAM_get_octet_string(p.ent, &vp, sizeof(ctx->test_entropy),
+                &ctx->test_entropy_len))
+            return 0;
+        if (ctx->test_entropy_len != sizeof(ctx->test_entropy)) {
+            ctx->test_entropy_len = 0;
+            ERR_raise(ERR_LIB_PROV, PROV_R_INVALID_SEED_LENGTH);
             return 0;
         }
     }

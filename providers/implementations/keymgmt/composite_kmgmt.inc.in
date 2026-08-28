@@ -48,4 +48,5 @@ static const OSSL_PARAM composite_export_params_list[] = {
 
 {- produce_param_decoder('composite_gen_set_params',
                          (['OSSL_PKEY_PARAM_PROPERTIES', 'propq', 'utf8_string'],
+                          ['OSSL_PKEY_PARAM_PRIV_KEY',   'privkey', 'octet_string'],
                          )); -}
