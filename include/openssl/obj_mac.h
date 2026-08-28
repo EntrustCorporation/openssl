@@ -1965,6 +1965,96 @@
 #define NID_id_alg_dh_pop               326
 #define OBJ_id_alg_dh_pop               OBJ_id_alg,4L
 
+#define SN_ML_DSA_44_RSA2048_PSS_SHA256         "id-mldsa44-rsa2048-pss-sha256"
+#define LN_ML_DSA_44_RSA2048_PSS_SHA256         "ML-DSA-44-RSA2048-PSS-SHA256"
+#define NID_ML_DSA_44_RSA2048_PSS_SHA256                1502
+#define OBJ_ML_DSA_44_RSA2048_PSS_SHA256                OBJ_id_alg,37L
+
+#define SN_ML_DSA_44_RSA2048_PKCS15_SHA256              "id-mldsa44-rsa2048-pkcs15-sha256"
+#define LN_ML_DSA_44_RSA2048_PKCS15_SHA256              "ML-DSA-44-RSA2048-PKCS15-SHA256"
+#define NID_ML_DSA_44_RSA2048_PKCS15_SHA256             1503
+#define OBJ_ML_DSA_44_RSA2048_PKCS15_SHA256             OBJ_id_alg,38L
+
+#define SN_ML_DSA_44_Ed25519_SHA512             "id-mldsa44-ed25519-sha512"
+#define LN_ML_DSA_44_Ed25519_SHA512             "ML-DSA-44-Ed25519-SHA512"
+#define NID_ML_DSA_44_Ed25519_SHA512            1504
+#define OBJ_ML_DSA_44_Ed25519_SHA512            OBJ_id_alg,39L
+
+#define SN_ML_DSA_44_ECDSA_P256_SHA256          "id-mldsa44-ecdsa-p256-sha256"
+#define LN_ML_DSA_44_ECDSA_P256_SHA256          "ML-DSA-44-ECDSA-P256-SHA256"
+#define NID_ML_DSA_44_ECDSA_P256_SHA256         1505
+#define OBJ_ML_DSA_44_ECDSA_P256_SHA256         OBJ_id_alg,40L
+
+#define SN_ML_DSA_65_RSA3072_PSS_SHA512         "id-mldsa65-rsa3072-pss-sha512"
+#define LN_ML_DSA_65_RSA3072_PSS_SHA512         "ML-DSA-65-RSA3072-PSS-SHA512"
+#define NID_ML_DSA_65_RSA3072_PSS_SHA512                1506
+#define OBJ_ML_DSA_65_RSA3072_PSS_SHA512                OBJ_id_alg,41L
+
+#define SN_ML_DSA_65_RSA3072_PKCS15_SHA512              "id-mldsa65-rsa3072-pkcs15-sha512"
+#define LN_ML_DSA_65_RSA3072_PKCS15_SHA512              "ML-DSA-65-RSA3072-PKCS15-SHA512"
+#define NID_ML_DSA_65_RSA3072_PKCS15_SHA512             1507
+#define OBJ_ML_DSA_65_RSA3072_PKCS15_SHA512             OBJ_id_alg,42L
+
+#define SN_ML_DSA_65_RSA4096_PSS_SHA512         "id-mldsa65-rsa4096-pss-sha512"
+#define LN_ML_DSA_65_RSA4096_PSS_SHA512         "ML-DSA-65-RSA4096-PSS-SHA512"
+#define NID_ML_DSA_65_RSA4096_PSS_SHA512                1508
+#define OBJ_ML_DSA_65_RSA4096_PSS_SHA512                OBJ_id_alg,43L
+
+#define SN_ML_DSA_65_RSA4096_PKCS15_SHA512              "id-mldsa65-rsa4096-pkcs15-sha512"
+#define LN_ML_DSA_65_RSA4096_PKCS15_SHA512              "ML-DSA-65-RSA4096-PKCS15-SHA512"
+#define NID_ML_DSA_65_RSA4096_PKCS15_SHA512             1509
+#define OBJ_ML_DSA_65_RSA4096_PKCS15_SHA512             OBJ_id_alg,44L
+
+#define SN_ML_DSA_65_ECDSA_P256_SHA512          "id-mldsa65-ecdsa-p256-sha512"
+#define LN_ML_DSA_65_ECDSA_P256_SHA512          "ML-DSA-65-ECDSA-P256-SHA512"
+#define NID_ML_DSA_65_ECDSA_P256_SHA512         1510
+#define OBJ_ML_DSA_65_ECDSA_P256_SHA512         OBJ_id_alg,45L
+
+#define SN_ML_DSA_65_ECDSA_P384_SHA512          "id-mldsa65-ecdsa-p384-sha512"
+#define LN_ML_DSA_65_ECDSA_P384_SHA512          "ML-DSA-65-ECDSA-P384-SHA512"
+#define NID_ML_DSA_65_ECDSA_P384_SHA512         1511
+#define OBJ_ML_DSA_65_ECDSA_P384_SHA512         OBJ_id_alg,46L
+
+#define SN_ML_DSA_65_ECDSA_brainpoolP256r1_SHA512               "id-mldsa65-ecdsa-brainpoolP256r1-sha512"
+#define LN_ML_DSA_65_ECDSA_brainpoolP256r1_SHA512               "ML-DSA-65-ECDSA-brainpoolP256r1-SHA512"
+#define NID_ML_DSA_65_ECDSA_brainpoolP256r1_SHA512              1512
+#define OBJ_ML_DSA_65_ECDSA_brainpoolP256r1_SHA512              OBJ_id_alg,47L
+
+#define SN_ML_DSA_65_Ed25519_SHA512             "id-mldsa65-ed25519-sha512"
+#define LN_ML_DSA_65_Ed25519_SHA512             "ML-DSA-65-Ed25519-SHA512"
+#define NID_ML_DSA_65_Ed25519_SHA512            1513
+#define OBJ_ML_DSA_65_Ed25519_SHA512            OBJ_id_alg,48L
+
+#define SN_ML_DSA_87_ECDSA_P384_SHA512          "id-mldsa87-ecdsa-p384-sha512"
+#define LN_ML_DSA_87_ECDSA_P384_SHA512          "ML-DSA-87-ECDSA-P384-SHA512"
+#define NID_ML_DSA_87_ECDSA_P384_SHA512         1514
+#define OBJ_ML_DSA_87_ECDSA_P384_SHA512         OBJ_id_alg,49L
+
+#define SN_ML_DSA_87_ECDSA_brainpoolP384r1_SHA512               "id-mldsa87-ecdsa-brainpoolp384r1-sha512"
+#define LN_ML_DSA_87_ECDSA_brainpoolP384r1_SHA512               "ML-DSA-87-ECDSA-brainpoolP384r1-SHA512"
+#define NID_ML_DSA_87_ECDSA_brainpoolP384r1_SHA512              1515
+#define OBJ_ML_DSA_87_ECDSA_brainpoolP384r1_SHA512              OBJ_id_alg,50L
+
+#define SN_ML_DSA_87_Ed448_SHAKE256             "id-mldsa87-ed448-shake256"
+#define LN_ML_DSA_87_Ed448_SHAKE256             "ML-DSA-87-Ed448-SHAKE256"
+#define NID_ML_DSA_87_Ed448_SHAKE256            1516
+#define OBJ_ML_DSA_87_Ed448_SHAKE256            OBJ_id_alg,51L
+
+#define SN_ML_DSA_87_RSA3072_PSS_SHA512         "id-mldsa87-rsa3072-pss-sha512"
+#define LN_ML_DSA_87_RSA3072_PSS_SHA512         "ML-DSA-87-RSA3072-PSS-SHA512"
+#define NID_ML_DSA_87_RSA3072_PSS_SHA512                1517
+#define OBJ_ML_DSA_87_RSA3072_PSS_SHA512                OBJ_id_alg,52L
+
+#define SN_ML_DSA_87_RSA4096_PSS_SHA512         "id-mldsa87-rsa4096-pss-sha512"
+#define LN_ML_DSA_87_RSA4096_PSS_SHA512         "ML-DSA-87-RSA4096-PSS-SHA512"
+#define NID_ML_DSA_87_RSA4096_PSS_SHA512                1518
+#define OBJ_ML_DSA_87_RSA4096_PSS_SHA512                OBJ_id_alg,53L
+
+#define SN_ML_DSA_87_ECDSA_P521_SHA512          "id-mldsa87-ecdsa-p521-sha512"
+#define LN_ML_DSA_87_ECDSA_P521_SHA512          "ML-DSA-87-ECDSA-P521-SHA512"
+#define NID_ML_DSA_87_ECDSA_P521_SHA512         1519
+#define OBJ_ML_DSA_87_ECDSA_P521_SHA512         OBJ_id_alg,54L
+
 #define SN_id_cmc_statusInfo            "id-cmc-statusInfo"
 #define NID_id_cmc_statusInfo           327
 #define OBJ_id_cmc_statusInfo           OBJ_id_cmc,1L

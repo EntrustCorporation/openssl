@@ -641,6 +641,26 @@ id-alg 2		: id-alg-noSignature
 id-alg 3		: id-alg-dh-sig-hmac-sha1
 id-alg 4		: id-alg-dh-pop
 
+# Composite signature algorithms (draft-ietf-lamps-pq-composite-sigs)
+id-alg 37	: id-mldsa44-rsa2048-pss-sha256			: ML-DSA-44-RSA2048-PSS-SHA256
+id-alg 38	: id-mldsa44-rsa2048-pkcs15-sha256		: ML-DSA-44-RSA2048-PKCS15-SHA256
+id-alg 39	: id-mldsa44-ed25519-sha512			: ML-DSA-44-Ed25519-SHA512
+id-alg 40	: id-mldsa44-ecdsa-p256-sha256			: ML-DSA-44-ECDSA-P256-SHA256
+id-alg 41	: id-mldsa65-rsa3072-pss-sha512			: ML-DSA-65-RSA3072-PSS-SHA512
+id-alg 42	: id-mldsa65-rsa3072-pkcs15-sha512		: ML-DSA-65-RSA3072-PKCS15-SHA512
+id-alg 43	: id-mldsa65-rsa4096-pss-sha512			: ML-DSA-65-RSA4096-PSS-SHA512
+id-alg 44	: id-mldsa65-rsa4096-pkcs15-sha512		: ML-DSA-65-RSA4096-PKCS15-SHA512
+id-alg 45	: id-mldsa65-ecdsa-p256-sha512			: ML-DSA-65-ECDSA-P256-SHA512
+id-alg 46	: id-mldsa65-ecdsa-p384-sha512			: ML-DSA-65-ECDSA-P384-SHA512
+id-alg 47	: id-mldsa65-ecdsa-brainpoolP256r1-sha512	: ML-DSA-65-ECDSA-brainpoolP256r1-SHA512
+id-alg 48	: id-mldsa65-ed25519-sha512			: ML-DSA-65-Ed25519-SHA512
+id-alg 49	: id-mldsa87-ecdsa-p384-sha512			: ML-DSA-87-ECDSA-P384-SHA512
+id-alg 50	: id-mldsa87-ecdsa-brainpoolp384r1-sha512	: ML-DSA-87-ECDSA-brainpoolP384r1-SHA512
+id-alg 51	: id-mldsa87-ed448-shake256			: ML-DSA-87-Ed448-SHAKE256
+id-alg 52	: id-mldsa87-rsa3072-pss-sha512			: ML-DSA-87-RSA3072-PSS-SHA512
+id-alg 53	: id-mldsa87-rsa4096-pss-sha512			: ML-DSA-87-RSA4096-PSS-SHA512
+id-alg 54	: id-mldsa87-ecdsa-p521-sha512			: ML-DSA-87-ECDSA-P521-SHA512
+
 # CMC controls
 id-cmc 1		: id-cmc-statusInfo
 id-cmc 2		: id-cmc-identification

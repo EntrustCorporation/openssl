@@ -9,6 +9,7 @@ $SM2_GOAL=../../libdefault.a
 $LMS_GOAL=../../libdefault.a ../../libfips.a
 $ML_DSA_GOAL=../../libdefault.a ../../libfips.a
 $SLH_DSA_GOAL=../../libdefault.a ../../libfips.a
+$COMPOSITE_GOAL=../../libdefault.a
 
 IF[{- !$disabled{dsa} -}]
   SOURCE[$DSA_GOAL]=dsa_sig.c
@@ -47,4 +48,9 @@ ENDIF
 
 IF[{- !$disabled{'slh-dsa'} -}]
   SOURCE[$DSA_GOAL]=slh_dsa_sig.c
+ENDIF
+
+IF[{- !$disabled{'ml-dsa'} -}]
+  SOURCE[$COMPOSITE_GOAL]=composite_sig.c
+  DEPEND[composite_sig.o]=../../common/include/prov/composite.h
 ENDIF
