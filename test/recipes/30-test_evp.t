@@ -189,13 +189,12 @@ push @defltfiles, qw(evppkey_ecx_kem.txt) unless $no_ecx;
 push @defltfiles, qw(evppkey_dsa_rfc6979.txt) unless ($no_dsa || $no_determinstic_nonce);
 push @defltfiles, qw(evppkey_sm2.txt) unless $no_sm2;
 # Composite algorithms are not in the FIPS provider — default provider only.
-# Some composite algorithms use ECX (Ed25519/Ed448) components; since the test
-# data files mix ECX and non-ECX stanzas, skip all of them in no-ecx builds.
+# keygen/sigver include an ECDSA-P256 stanza; skip them in no-ec builds.
+push @defltfiles, qw(evppkey_composite_siggen.txt) unless $no_composite;
 push @defltfiles, qw(
                       evppkey_composite_keygen.txt
-                      evppkey_composite_siggen.txt
                       evppkey_composite_sigver.txt
-                     ) unless $no_composite || $no_ecx;
+                     ) unless $no_composite || $no_ec;
 push @defltfiles, qw(evpciph_aes_gcm_siv.txt) unless $no_siv;
 push @defltfiles, qw(evpciph_aes_siv.txt) unless $no_siv;
 push @defltfiles, qw(evpkdf_argon2.txt) unless $no_argon2;

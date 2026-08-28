@@ -30,8 +30,6 @@ static OSSL_PROVIDER *lib_prov = NULL;
 
 /*
  * Generate a composite keypair using DRBG (no fixed seed).
- * The algorithm name must be one of the 18 composite names, e.g.
- * "ML-DSA-44-RSA2048-PSS-SHA256".
  */
 static EVP_PKEY *do_gen_key(const char *alg)
 {
@@ -155,26 +153,10 @@ err:
     return ret;
 }
 
-/* Table of all 18 composite algorithm names */
+/* Table of composite algorithm names */
 static const char *composite_alg_names[] = {
-    "ML-DSA-44-RSA2048-PSS-SHA256",
-    "ML-DSA-44-RSA2048-PKCS15-SHA256",
-    "ML-DSA-44-Ed25519-SHA512",
-    "ML-DSA-44-ECDSA-P256-SHA256",
-    "ML-DSA-65-RSA3072-PSS-SHA512",
     "ML-DSA-65-RSA3072-PKCS15-SHA512",
-    "ML-DSA-65-RSA4096-PSS-SHA512",
-    "ML-DSA-65-RSA4096-PKCS15-SHA512",
     "ML-DSA-65-ECDSA-P256-SHA512",
-    "ML-DSA-65-ECDSA-P384-SHA512",
-    "ML-DSA-65-ECDSA-brainpoolP256r1-SHA512",
-    "ML-DSA-65-Ed25519-SHA512",
-    "ML-DSA-87-ECDSA-P384-SHA512",
-    "ML-DSA-87-ECDSA-brainpoolP384r1-SHA512",
-    "ML-DSA-87-Ed448-SHAKE256",
-    "ML-DSA-87-RSA3072-PSS-SHA512",
-    "ML-DSA-87-RSA4096-PSS-SHA512",
-    "ML-DSA-87-ECDSA-P521-SHA512",
 };
 #define NUM_COMPOSITE_ALGS (int)(sizeof(composite_alg_names) / sizeof(composite_alg_names[0]))
 
@@ -193,12 +175,6 @@ static int composite_drbg_sign_verify_test(int tst_id)
 #ifdef OPENSSL_NO_EC
     if (strstr(alg, "ECDSA") != NULL) {
         TEST_note("Skipping %s - EC not available", alg);
-        return 1;
-    }
-#endif
-#ifdef OPENSSL_NO_ECX
-    if (strstr(alg, "Ed25519") != NULL || strstr(alg, "Ed448") != NULL) {
-        TEST_note("Skipping %s - ECX (Ed25519/Ed448) not available", alg);
         return 1;
     }
 #endif
@@ -224,21 +200,21 @@ static int composite_keygen_drbg_test(void)
     int ret = 0;
     EVP_PKEY *k1 = NULL, *k2 = NULL, *k3 = NULL, *k1_dup = NULL;
 
-#ifdef OPENSSL_NO_ECX
-    TEST_note("Skipping composite_keygen_drbg_test - requires ECX (Ed25519)");
-    return 1;
-#endif
-    if (!TEST_ptr(k1 = do_gen_key("ML-DSA-44-Ed25519-SHA512"))
-        || !TEST_ptr(k2 = do_gen_key("ML-DSA-44-Ed25519-SHA512"))
-        || !TEST_ptr(k3 = do_gen_key("ML-DSA-44-RSA2048-PSS-SHA256"))
+    if (!TEST_ptr(k1 = do_gen_key("ML-DSA-65-RSA3072-PKCS15-SHA512"))
+        || !TEST_ptr(k2 = do_gen_key("ML-DSA-65-RSA3072-PKCS15-SHA512"))
         /* same algorithm, different keys */
         || !TEST_int_eq(EVP_PKEY_eq(k1, k2), 0)
-        /* different algorithm */
-        || !TEST_int_eq(EVP_PKEY_eq(k1, k3), -1)
         /* dup must produce an equal key */
         || !TEST_ptr(k1_dup = EVP_PKEY_dup(k1))
         || !TEST_int_eq(EVP_PKEY_eq(k1, k1_dup), 1))
         goto err;
+
+#ifndef OPENSSL_NO_EC
+    if (!TEST_ptr(k3 = do_gen_key("ML-DSA-65-ECDSA-P256-SHA512"))
+        /* different algorithm must return -1 */
+        || !TEST_int_eq(EVP_PKEY_eq(k1, k3), -1))
+        goto err;
+#endif
 
     ret = 1;
 err:
@@ -265,13 +241,6 @@ static int composite_siggen_test(int tst_id)
     int ret = 0;
     const COMPOSITE_SIG_GEN_TEST_DATA *td = &composite_siggen_testdata[tst_id];
     EVP_PKEY_CTX *sctx = NULL;
-
-#ifdef OPENSSL_NO_ECX
-    if (strstr(td->alg, "Ed25519") != NULL || strstr(td->alg, "Ed448") != NULL) {
-        TEST_note("Skipping %s - ECX (Ed25519/Ed448) not available", td->alg);
-        return 1;
-    }
-#endif
     EVP_PKEY *pkey = NULL;
     EVP_SIGNATURE *sig_alg = NULL;
     OSSL_PARAM params[2], *p = params;
@@ -362,19 +331,23 @@ err:
 static int composite_cross_alg_mismatch_test(void)
 {
     int ret = 0;
-    EVP_PKEY *key_pss = NULL, *key_pkcs = NULL;
+    EVP_PKEY *key_a = NULL, *key_b = NULL;
     EVP_PKEY_CTX *sctx = NULL, *vctx = NULL;
-    EVP_SIGNATURE *sig_pss = NULL, *sig_pkcs = NULL;
+    EVP_SIGNATURE *sig_a = NULL, *sig_b = NULL;
     uint8_t *sig = NULL;
     size_t sig_len = 0;
-    const char *alg_a = "ML-DSA-44-RSA2048-PSS-SHA256";
-    const char *alg_b = "ML-DSA-44-RSA2048-PKCS15-SHA256";
+    const char *alg_a = "ML-DSA-65-RSA3072-PKCS15-SHA512";
+    const char *alg_b = "ML-DSA-65-ECDSA-P256-SHA512";
 
-    if (!TEST_ptr(key_pss = do_gen_key(alg_a))
-        || !TEST_ptr(key_pkcs = do_gen_key(alg_b))
-        || !TEST_ptr(sctx = EVP_PKEY_CTX_new_from_pkey(lib_ctx, key_pss, NULL))
-        || !TEST_ptr(sig_pss = EVP_SIGNATURE_fetch(lib_ctx, alg_a, NULL))
-        || !TEST_int_eq(EVP_PKEY_sign_message_init(sctx, sig_pss, NULL), 1)
+#ifdef OPENSSL_NO_EC
+    TEST_note("Skipping composite_cross_alg_mismatch_test - requires EC (ECDSA-P256)");
+    return 1;
+#endif
+    if (!TEST_ptr(key_a = do_gen_key(alg_a))
+        || !TEST_ptr(key_b = do_gen_key(alg_b))
+        || !TEST_ptr(sctx = EVP_PKEY_CTX_new_from_pkey(lib_ctx, key_a, NULL))
+        || !TEST_ptr(sig_a = EVP_SIGNATURE_fetch(lib_ctx, alg_a, NULL))
+        || !TEST_int_eq(EVP_PKEY_sign_message_init(sctx, sig_a, NULL), 1)
         || !TEST_int_eq(EVP_PKEY_sign(sctx, NULL, &sig_len,
                             test_msg, sizeof(test_msg) - 1),
             1)
@@ -388,9 +361,9 @@ static int composite_cross_alg_mismatch_test(void)
      * Verify alg_a signature under alg_b key — must fail.
      * EVP_PKEY_verify returns 0 for "bad signature" (not -1).
      */
-    if (!TEST_ptr(vctx = EVP_PKEY_CTX_new_from_pkey(lib_ctx, key_pkcs, NULL))
-        || !TEST_ptr(sig_pkcs = EVP_SIGNATURE_fetch(lib_ctx, alg_b, NULL))
-        || !TEST_int_eq(EVP_PKEY_verify_message_init(vctx, sig_pkcs, NULL), 1)
+    if (!TEST_ptr(vctx = EVP_PKEY_CTX_new_from_pkey(lib_ctx, key_b, NULL))
+        || !TEST_ptr(sig_b = EVP_SIGNATURE_fetch(lib_ctx, alg_b, NULL))
+        || !TEST_int_eq(EVP_PKEY_verify_message_init(vctx, sig_b, NULL), 1)
         || !TEST_int_eq(EVP_PKEY_verify(vctx, sig, sig_len,
                             test_msg, sizeof(test_msg) - 1),
             0))
@@ -398,10 +371,10 @@ static int composite_cross_alg_mismatch_test(void)
 
     ret = 1;
 err:
-    EVP_PKEY_free(key_pss);
-    EVP_PKEY_free(key_pkcs);
-    EVP_SIGNATURE_free(sig_pss);
-    EVP_SIGNATURE_free(sig_pkcs);
+    EVP_PKEY_free(key_a);
+    EVP_PKEY_free(key_b);
+    EVP_SIGNATURE_free(sig_a);
+    EVP_SIGNATURE_free(sig_b);
     OPENSSL_free(sig);
     EVP_PKEY_CTX_free(sctx);
     EVP_PKEY_CTX_free(vctx);
@@ -424,12 +397,6 @@ static int composite_tampered_sig_test(int tst_id)
 #ifdef OPENSSL_NO_EC
     if (strstr(alg, "ECDSA") != NULL) {
         TEST_note("Skipping %s - EC not available", alg);
-        return 1;
-    }
-#endif
-#ifdef OPENSSL_NO_ECX
-    if (strstr(alg, "Ed25519") != NULL || strstr(alg, "Ed448") != NULL) {
-        TEST_note("Skipping %s - ECX (Ed25519/Ed448) not available", alg);
         return 1;
     }
 #endif

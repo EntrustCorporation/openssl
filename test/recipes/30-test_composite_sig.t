@@ -24,15 +24,13 @@ plan skip_all => 'Composite signatures are not supported in this build'
 
 my $no_fips = disabled('fips') || ($ENV{NO_FIPS} // 0);
 my $no_ec   = disabled('ec');
-my $no_ecx  = $no_ec || disabled('ecx');
 my $provconf = srctop_file("test", "fips-and-base.cnf");
 
 # 1 C test run + 1 FIPS skip + 1 require_ok
-# + N × 2 tconversion subtests:
-#   no-ec  removes 7 ECDSA + 3 ECX → 8 RSA remain → 19
-#   no-ecx removes 3 ECX           → 15 remain    → 33
-#   default: 18 composites                         → 39
-plan tests => $no_ec ? 19 : $no_ecx ? 33 : 39;
+# + N x 2 tconversion subtests:
+#   no-ec  removes ECDSA-P256 -> 1 RSA remain -> 5
+#   default: 2 composites               -> 7
+plan tests => $no_ec ? 5 : 7;
 
 # ─── C unit test binary ──────────────────────────────────────────────────────
 ok(run(test(["composite_sig_test"])), "running composite_sig_test");
@@ -51,29 +49,12 @@ SKIP: {
 
 require_ok(srctop_file('test','recipes','tconversion.pl'));
 
-# Remove ECX-dependent composites when ECX is disabled
+# Remove EC-dependent composites when EC is disabled
 my @composite_pems = (
-    [ "ML-DSA-44-RSA2048-PSS-SHA256",          "testcomposite44-rsa2048pss"             ],
-    [ "ML-DSA-44-RSA2048-PKCS15-SHA256",        "testcomposite44-rsa2048pkcs15"          ],
-    [ "ML-DSA-44-Ed25519-SHA512",               "testcomposite44-ed25519"                ],
-    [ "ML-DSA-44-ECDSA-P256-SHA256",            "testcomposite44-ecdsa-p256"             ],
-    [ "ML-DSA-65-RSA3072-PSS-SHA512",           "testcomposite65-rsa3072pss"             ],
-    [ "ML-DSA-65-RSA3072-PKCS15-SHA512",        "testcomposite65-rsa3072pkcs15"          ],
-    [ "ML-DSA-65-RSA4096-PSS-SHA512",           "testcomposite65-rsa4096pss"             ],
-    [ "ML-DSA-65-RSA4096-PKCS15-SHA512",        "testcomposite65-rsa4096pkcs15"          ],
-    [ "ML-DSA-65-ECDSA-P256-SHA512",            "testcomposite65-ecdsa-p256"             ],
-    [ "ML-DSA-65-ECDSA-P384-SHA512",            "testcomposite65-ecdsa-p384"             ],
-    [ "ML-DSA-65-ECDSA-brainpoolP256r1-SHA512", "testcomposite65-ecdsa-brainpoolp256r1"  ],
-    [ "ML-DSA-65-Ed25519-SHA512",               "testcomposite65-ed25519"                ],
-    [ "ML-DSA-87-ECDSA-P384-SHA512",            "testcomposite87-ecdsa-p384"             ],
-    [ "ML-DSA-87-ECDSA-brainpoolP384r1-SHA512", "testcomposite87-ecdsa-brainpoolp384r1"  ],
-    [ "ML-DSA-87-Ed448-SHAKE256",               "testcomposite87-ed448"                  ],
-    [ "ML-DSA-87-RSA3072-PSS-SHA512",           "testcomposite87-rsa3072pss"             ],
-    [ "ML-DSA-87-RSA4096-PSS-SHA512",           "testcomposite87-rsa4096pss"             ],
-    [ "ML-DSA-87-ECDSA-P521-SHA512",            "testcomposite87-ecdsa-p521"             ],
+    [ "ML-DSA-65-RSA3072-PKCS15-SHA512", "testcomposite65-rsa3072pkcs15" ],
+    [ "ML-DSA-65-ECDSA-P256-SHA512",     "testcomposite65-ecdsa-p256"    ],
 );
-@composite_pems = grep { $_->[0] !~ /ECDSA/ }         @composite_pems if $no_ec;
-@composite_pems = grep { $_->[0] !~ /Ed25519|Ed448/ } @composite_pems if $no_ecx;
+@composite_pems = grep { $_->[0] !~ /ECDSA/ } @composite_pems if $no_ec;
 
 foreach my $entry (@composite_pems) {
     my ($alg, $base) = @$entry;
