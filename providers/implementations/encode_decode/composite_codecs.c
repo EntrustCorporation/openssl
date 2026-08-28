@@ -27,8 +27,6 @@
  *
  *   RSA:      RSAPublicKey DER (PKCS#1)
  *   EC:       Uncompressed X9.62 point 0x04||x||y
- *   Ed25519:  raw 32 bytes
- *   Ed448:    raw 57 bytes
  *
  * On success, *out is a newly-allocated buffer of *out_len bytes.
  * Caller must OPENSSL_free(*out).
@@ -66,18 +64,6 @@ static int composite_encode_classic_pub(const EVP_PKEY *pkey,
             OPENSSL_free(*out);
             *out = NULL;
         }
-    } else if (keytype == EVP_PKEY_ED25519 || keytype == EVP_PKEY_ED448) {
-        if (!EVP_PKEY_get_raw_public_key(pkey, NULL, &len))
-            return 0;
-        *out = OPENSSL_malloc(len);
-        if (*out == NULL)
-            return 0;
-        if (!EVP_PKEY_get_raw_public_key(pkey, *out, &len)) {
-            OPENSSL_free(*out);
-            *out = NULL;
-        } else {
-            *out_len = len;
-        }
     } else {
         ERR_raise_data(ERR_LIB_PROV, PROV_R_NOT_SUPPORTED,
             "unsupported classic key type %d", keytype);
@@ -92,8 +78,6 @@ static int composite_encode_classic_pub(const EVP_PKEY *pkey,
  *
  *   RSA:      RSAPrivateKey DER (PKCS#1)
  *   EC:       ECPrivateKey DER with NamedCurve (RFC5915)
- *   Ed25519:  raw 32 bytes
- *   Ed448:    raw 57 bytes
  *
  * On success, *out is a newly-allocated buffer of *out_len bytes.
  * Caller must OPENSSL_clear_free(*out, *out_len).
@@ -104,7 +88,6 @@ static int composite_encode_classic_priv(const EVP_PKEY *pkey,
 {
     int keytype = EVP_PKEY_get_base_id(pkey);
     OSSL_ENCODER_CTX *ectx;
-    size_t len;
 
     *out = NULL;
     *out_len = 0;
@@ -149,18 +132,6 @@ static int composite_encode_classic_priv(const EVP_PKEY *pkey,
             OSSL_ENCODER_CTX_free(ectx);
         }
         EVP_PKEY_free(ec_copy);
-    } else if (keytype == EVP_PKEY_ED25519 || keytype == EVP_PKEY_ED448) {
-        if (!EVP_PKEY_get_raw_private_key(pkey, NULL, &len))
-            return 0;
-        *out = OPENSSL_malloc(len);
-        if (*out == NULL)
-            return 0;
-        if (!EVP_PKEY_get_raw_private_key(pkey, *out, &len)) {
-            OPENSSL_clear_free(*out, len);
-            *out = NULL;
-        } else {
-            *out_len = len;
-        }
     } else {
         ERR_raise_data(ERR_LIB_PROV, PROV_R_NOT_SUPPORTED,
             "unsupported classic key type %d", keytype);
@@ -346,12 +317,6 @@ static EVP_PKEY *composite_codecs_decode_classic_pub(OSSL_LIB_CTX *libctx,
                 <= 0)
             pkey = NULL;
         EVP_PKEY_CTX_free(pctx);
-    } else if (strcmp(classic_alg, "ED25519") == 0) {
-        pkey = EVP_PKEY_new_raw_public_key_ex(libctx, "ED25519", NULL,
-            buf, buf_len);
-    } else if (strcmp(classic_alg, "ED448") == 0) {
-        pkey = EVP_PKEY_new_raw_public_key_ex(libctx, "ED448", NULL,
-            buf, buf_len);
     }
     return pkey;
 }
@@ -385,12 +350,6 @@ static EVP_PKEY *composite_codecs_decode_classic_priv(OSSL_LIB_CTX *libctx,
         if (!OSSL_DECODER_from_data(dctx, &ptr, &ptrlen))
             pkey = NULL;
         OSSL_DECODER_CTX_free(dctx);
-    } else if (strcmp(classic_alg, "ED25519") == 0) {
-        pkey = EVP_PKEY_new_raw_private_key_ex(libctx, "ED25519", NULL,
-            buf, buf_len);
-    } else if (strcmp(classic_alg, "ED448") == 0) {
-        pkey = EVP_PKEY_new_raw_private_key_ex(libctx, "ED448", NULL,
-            buf, buf_len);
     }
     return pkey;
 }
