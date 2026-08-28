@@ -31,6 +31,13 @@ OpenSSL Releases
 
 ### Changes between 4.0 and 4.1 [xx XXX xxxx]
 
+ * Added 2 composite post-quantum signature algorithms combining ML-DSA 65 with
+   RSA3072-PKCS15 and ECDSA-P256 as defined in
+   [draft-ietf-lamps-pq-composite-sigs](https://datatracker.ietf.org/doc/draft-ietf-lamps-pq-composite-sigs):
+   id-MLDSA44-ECDSA-P256-SHA256,id-MLDSA65-RSA3072-PKCS15-SHA512.
+   These algorithms are available in the default provider only.
+
+   *Felipe Ventura*
  * Added AVX512 optimized SHAKE x4 operations for ML-DSA on x86_64.
 
    *Marcel Cornu and Tomasz Kantecki*

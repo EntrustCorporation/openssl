@@ -1965,6 +1965,16 @@
 #define NID_id_alg_dh_pop               326
 #define OBJ_id_alg_dh_pop               OBJ_id_alg,4L
 
+#define SN_ML_DSA_65_RSA3072_PKCS15_SHA512              "id-mldsa65-rsa3072-pkcs15-sha512"
+#define LN_ML_DSA_65_RSA3072_PKCS15_SHA512              "ML-DSA-65-RSA3072-PKCS15-SHA512"
+#define NID_ML_DSA_65_RSA3072_PKCS15_SHA512             1502
+#define OBJ_ML_DSA_65_RSA3072_PKCS15_SHA512             OBJ_id_alg,42L
+
+#define SN_ML_DSA_65_ECDSA_P256_SHA512          "id-mldsa65-ecdsa-p256-sha512"
+#define LN_ML_DSA_65_ECDSA_P256_SHA512          "ML-DSA-65-ECDSA-P256-SHA512"
+#define NID_ML_DSA_65_ECDSA_P256_SHA512         1503
+#define OBJ_ML_DSA_65_ECDSA_P256_SHA512         OBJ_id_alg,45L
+
 #define SN_id_cmc_statusInfo            "id-cmc-statusInfo"
 #define NID_id_cmc_statusInfo           327
 #define OBJ_id_cmc_statusInfo           OBJ_id_cmc,1L

@@ -20,7 +20,7 @@
 #include <crypto/asn1.h>
 
 /* Serialized OID's */
-static const unsigned char so[9582] = {
+static const unsigned char so[9598] = {
     0x2A,0x86,0x48,0x86,0xF7,0x0D,                 /* [    0] OBJ_rsadsi */
     0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,            /* [    6] OBJ_pkcs */
     0x2A,0x86,0x48,0x86,0xF7,0x0D,0x02,0x02,       /* [   13] OBJ_md2 */
@@ -1364,9 +1364,11 @@ static const unsigned char so[9582] = {
     0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,0x09,0x10,0x0D,  /* [ 9549] OBJ_id_smime_ori */
     0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,0x09,0x10,0x0D,0x03,  /* [ 9559] OBJ_id_smime_ori_kem */
     0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,0x09,0x10,0x03,0x11,  /* [ 9570] OBJ_id_alg_hss_lms_hashsig */
+    0x2B,0x06,0x01,0x05,0x05,0x07,0x06,0x2A,       /* [ 9581] OBJ_ML_DSA_65_RSA3072_PKCS15_SHA512 */
+    0x2B,0x06,0x01,0x05,0x05,0x07,0x06,0x2D,       /* [ 9589] OBJ_ML_DSA_65_ECDSA_P256_SHA512 */
 };
 
-#define NUM_NID 1502
+#define NUM_NID 1504
 static const ASN1_OBJECT nid_objs[NUM_NID] = {
     {"UNDEF", "undefined", NID_undef},
     {"rsadsi", "RSA Data Security, Inc.", NID_rsadsi, 6, &so[0]},
@@ -2870,9 +2872,11 @@ static const ASN1_OBJECT nid_objs[NUM_NID] = {
     {"id-smime-ori", "id-smime-ori", NID_id_smime_ori, 10, &so[9549]},
     {"id-smime-ori-kem", "id-smime-ori-kem", NID_id_smime_ori_kem, 11, &so[9559]},
     {"id-alg-hss-lms-hashsig", "id-alg-hss-lms-hashsig", NID_id_alg_hss_lms_hashsig, 11, &so[9570]},
+    {"id-mldsa65-rsa3072-pkcs15-sha512", "ML-DSA-65-RSA3072-PKCS15-SHA512", NID_ML_DSA_65_RSA3072_PKCS15_SHA512, 8, &so[9581]},
+    {"id-mldsa65-ecdsa-p256-sha512", "ML-DSA-65-ECDSA-P256-SHA512", NID_ML_DSA_65_ECDSA_P256_SHA512, 8, &so[9589]},
 };
 
-#define NUM_SN 1493
+#define NUM_SN 1495
 static const unsigned int sn_objs[NUM_SN] = {
      364,    /* "AD_DVCS" */
      419,    /* "AES-128-CBC" */
@@ -3615,6 +3619,8 @@ static const unsigned int sn_objs[NUM_SN] = {
     1457,    /* "id-ml-dsa-44" */
     1458,    /* "id-ml-dsa-65" */
     1459,    /* "id-ml-dsa-87" */
+    1503,    /* "id-mldsa65-ecdsa-p256-sha512" */
+    1502,    /* "id-mldsa65-rsa3072-pkcs15-sha512" */
      280,    /* "id-mod-attribute-cert" */
      274,    /* "id-mod-cmc" */
      277,    /* "id-mod-cmp" */
@@ -4369,7 +4375,7 @@ static const unsigned int sn_objs[NUM_SN] = {
     1289,    /* "zstd" */
 };
 
-#define NUM_LN 1493
+#define NUM_LN 1495
 static const unsigned int ln_objs[NUM_LN] = {
      363,    /* "AD Time Stamping" */
      405,    /* "ANSI X9.62" */
@@ -4531,6 +4537,8 @@ static const unsigned int ln_objs[NUM_LN] = {
      504,    /* "MIME MHS" */
     1457,    /* "ML-DSA-44" */
     1458,    /* "ML-DSA-65" */
+    1503,    /* "ML-DSA-65-ECDSA-P256-SHA512" */
+    1502,    /* "ML-DSA-65-RSA3072-PKCS15-SHA512" */
     1459,    /* "ML-DSA-87" */
     1456,    /* "ML-KEM-1024" */
     1454,    /* "ML-KEM-512" */
@@ -5866,7 +5874,7 @@ static const unsigned int ln_objs[NUM_LN] = {
      125,    /* "zlib compression" */
 };
 
-#define NUM_OBJ 1350
+#define NUM_OBJ 1352
 static const unsigned int obj_objs[NUM_OBJ] = {
        0,    /* OBJ_undef                        0 */
      181,    /* OBJ_iso                          1 */
@@ -6695,6 +6703,8 @@ static const unsigned int obj_objs[NUM_OBJ] = {
      324,    /* OBJ_id_alg_noSignature           1 3 6 1 5 5 7 6 2 */
      325,    /* OBJ_id_alg_dh_sig_hmac_sha1      1 3 6 1 5 5 7 6 3 */
      326,    /* OBJ_id_alg_dh_pop                1 3 6 1 5 5 7 6 4 */
+    1502,    /* OBJ_ML_DSA_65_RSA3072_PKCS15_SHA512 1 3 6 1 5 5 7 6 42 */
+    1503,    /* OBJ_ML_DSA_65_ECDSA_P256_SHA512  1 3 6 1 5 5 7 6 45 */
      327,    /* OBJ_id_cmc_statusInfo            1 3 6 1 5 5 7 7 1 */
      328,    /* OBJ_id_cmc_identification        1 3 6 1 5 5 7 7 2 */
      329,    /* OBJ_id_cmc_identityProof         1 3 6 1 5 5 7 7 3 */
