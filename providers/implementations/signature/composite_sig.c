@@ -15,11 +15,16 @@
 #include <openssl/proverr.h>
 #include "crypto/evp.h"
 #include "crypto/ml_dsa.h"
+#include "internal/der.h"
+#include "internal/packet.h"
 #include "prov/implementations.h"
 #include "prov/provider_ctx.h"
 #include "prov/providercommon.h"
 #include "prov/composite.h"
 #include "prov/names.h"
+
+#define composite_set_ctx_params_st composite_verifymsg_set_ctx_params_st
+#define composite_set_ctx_params_decoder composite_verifymsg_set_ctx_params_decoder
 #include "providers/implementations/signature/composite_sig.inc"
 #include <openssl/evp.h>
 #include <openssl/rsa.h>
@@ -124,6 +129,41 @@ static int composite_compute_prehash(OSSL_LIB_CTX *libctx,
 }
 
 /*
+ * Build M' = Prefix(32) || Label || uint8(ctx_len) || ctx || PH(M) into a
+ * newly allocated buffer, per draft-ietf-lamps-pq-composite-sigs §2.2.
+ * Caller must OPENSSL_free() (or OPENSSL_clear_free()) the result.
+ */
+static uint8_t *composite_build_mprime(PROV_COMPOSITE_CTX *ctx,
+    const COMPOSITE_ALG_INFO *info,
+    const uint8_t *ph, size_t ph_len,
+    size_t *tbs_len)
+{
+    uint8_t *tbs;
+    size_t offset;
+
+    if (ph_len != info->prehash_len)
+        return NULL;
+
+    *tbs_len = 32 + strlen(info->label) + 1 + ctx->context_string_len + info->prehash_len;
+    tbs = OPENSSL_malloc(*tbs_len);
+    if (tbs == NULL)
+        return NULL;
+
+    offset = 0;
+    memcpy(tbs + offset, composite_sig_prefix, 32);
+    offset += 32;
+    memcpy(tbs + offset, info->label, strlen(info->label));
+    offset += strlen(info->label);
+    tbs[offset++] = (uint8_t)ctx->context_string_len;
+    if (ctx->context_string_len > 0) {
+        memcpy(tbs + offset, ctx->context_string, ctx->context_string_len);
+        offset += ctx->context_string_len;
+    }
+    memcpy(tbs + offset, ph, info->prehash_len);
+    return tbs;
+}
+
+/*
  * Sign tbs/tbs_len with the traditional (non-ML-DSA) component key.
  */
 static int composite_classic_sign(PROV_COMPOSITE_CTX *ctx,
@@ -169,65 +209,39 @@ err:
     return ret;
 }
 
-static int composite_sign(void *vctx, uint8_t *sig, size_t *siglen, size_t sigsize,
-    const uint8_t *msg, size_t msg_len)
+/*
+ * Shared core of signing: given an already-computed PH(M) — whether from
+ * hashing the whole message in one shot, from the streaming msg_update()/
+ * msg_final() path, or supplied directly by the caller via
+ * OSSL_SIGNATURE_PARAM_COMPOSITE_PREHASH — build M' and produce the
+ * composite signature (ML-DSA component || classic component).
+ */
+static int composite_sign_ph(PROV_COMPOSITE_CTX *ctx,
+    const COMPOSITE_ALG_INFO *info,
+    uint8_t *sig, size_t *siglen, size_t sigsize,
+    const uint8_t *ph, size_t ph_len)
 {
-    PROV_COMPOSITE_CTX *ctx = (PROV_COMPOSITE_CTX *)vctx;
-    const COMPOSITE_ALG_INFO *info;
     uint8_t *tbs = NULL;
-    uint8_t prehash[64]; /* max prehash output size */
     size_t tbs_len = 0;
-    size_t offset;
     uint8_t rnd[32];
     size_t ml_dsa_siglen, classic_siglen, ml_dsa_sig_max;
     int ret = 0;
 
-    if (!ossl_prov_is_running())
-        return 0;
-
-    if (ctx->key == NULL || ctx->alg == NULL)
-        return 0;
-
-    info = composite_find_alg_info(ctx->alg);
-    if (info == NULL) {
-        ERR_raise(ERR_LIB_PROV, ERR_R_UNSUPPORTED);
-        return 0;
-    }
-
     ml_dsa_sig_max = ossl_ml_dsa_key_get_sig_len(ctx->key->ml_dsa_key);
 
-    /* Size query */
+    /*
+     * Size query: upper bound only (EVP_PKEY_get_size() for EC is the max
+     * DER size, not exact); real length is set after signing below.
+     */
     if (sig == NULL) {
         *siglen = ml_dsa_sig_max
             + (size_t)EVP_PKEY_get_size(ctx->key->classic_key);
         return 1;
     }
 
-    /* Compute PH(M) */
-    if (!composite_compute_prehash(ctx->libctx, info, msg, msg_len, prehash))
-        goto err;
-
-    /*
-     * Build M' = Prefix(32) || Label || uint8(ctx_len) || ctx || PH(M)
-     * per draft-ietf-lamps-pq-composite-sigs §2.2.
-     * Label is the ASCII string from §6, e.g. "COMPSIG-MLDSA44-RSA2048-PSS-SHA256".
-     */
-    tbs_len = 32 + strlen(info->label) + 1 + ctx->context_string_len + info->prehash_len;
-    tbs = OPENSSL_malloc(tbs_len);
+    tbs = composite_build_mprime(ctx, info, ph, ph_len, &tbs_len);
     if (tbs == NULL)
         goto err;
-
-    offset = 0;
-    memcpy(tbs + offset, composite_sig_prefix, 32);
-    offset += 32;
-    memcpy(tbs + offset, info->label, strlen(info->label));
-    offset += strlen(info->label);
-    tbs[offset++] = (uint8_t)ctx->context_string_len;
-    if (ctx->context_string_len > 0) {
-        memcpy(tbs + offset, ctx->context_string, ctx->context_string_len);
-        offset += ctx->context_string_len;
-    }
-    memcpy(tbs + offset, prehash, info->prehash_len);
 
     /* ML-DSA component: pure ML-DSA on M', with Label as mldsa_ctx per §3.1 */
     if (ctx->test_entropy_len != 0) {
@@ -260,10 +274,49 @@ err:
     return ret;
 }
 
+static int composite_sign(void *vctx, uint8_t *sig, size_t *siglen, size_t sigsize,
+    const uint8_t *msg, size_t msg_len)
+{
+    PROV_COMPOSITE_CTX *ctx = (PROV_COMPOSITE_CTX *)vctx;
+    const COMPOSITE_ALG_INFO *info;
+    uint8_t prehash[64]; /* max prehash output size */
+    const uint8_t *ph = NULL;
+    size_t ph_len = 0;
+
+    if (!ossl_prov_is_running())
+        return 0;
+
+    if (ctx->key == NULL || ctx->alg == NULL)
+        return 0;
+
+    info = composite_find_alg_info(ctx->alg);
+    if (info == NULL) {
+        ERR_raise(ERR_LIB_PROV, ERR_R_UNSUPPORTED);
+        return 0;
+    }
+
+    if (sig != NULL) {
+        if (ctx->have_prehash) {
+            /* Caller pre-computed PH(M) itself and passed it in as msg. */
+            ph = msg;
+            ph_len = msg_len;
+        } else {
+            if (!composite_compute_prehash(ctx->libctx, info, msg, msg_len, prehash))
+                return 0;
+            ph = prehash;
+            ph_len = info->prehash_len;
+        }
+    }
+
+    return composite_sign_ph(ctx, info, sig, siglen, sigsize, ph, ph_len);
+}
+
 static void composite_freectx(void *vctx)
 {
     PROV_COMPOSITE_CTX *ctx = (PROV_COMPOSITE_CTX *)vctx;
 
+    EVP_MD_CTX_free(ctx->prehash_ctx);
+    OPENSSL_free(ctx->sig);
     OPENSSL_cleanse(ctx->test_entropy, sizeof(ctx->test_entropy));
     OPENSSL_free(ctx);
 }
@@ -274,7 +327,30 @@ static void *composite_dupctx(void *vctx)
     PROV_COMPOSITE_CTX *dst;
 
     dst = OPENSSL_memdup(src, sizeof(*src));
+    if (dst == NULL)
+        return NULL;
+
+    dst->prehash_ctx = NULL;
+    dst->sig = NULL;
+
+    if (src->prehash_ctx != NULL) {
+        dst->prehash_ctx = EVP_MD_CTX_dup(src->prehash_ctx);
+        if (dst->prehash_ctx == NULL)
+            goto err;
+    }
+
+    if (src->sig != NULL) {
+        dst->sig = OPENSSL_memdup(src->sig, src->siglen);
+        if (dst->sig == NULL)
+            goto err;
+    }
+
     return dst;
+err:
+    EVP_MD_CTX_free(dst->prehash_ctx);
+    OPENSSL_free(dst->sig);
+    OPENSSL_free(dst);
+    return NULL;
 }
 
 static int composite_set_ctx_params(void *vctx, const OSSL_PARAM params[]);
@@ -288,6 +364,7 @@ static int composite_sign_init(void *vctx, void *vkey, const OSSL_PARAM params[]
         return 0;
 
     ctx->key = (COMPOSITE_KEY *)vkey;
+    ctx->operation = EVP_PKEY_OP_SIGN;
 
     info = composite_find_alg_info(ctx->alg);
     if (info == NULL) {
@@ -312,6 +389,7 @@ static int composite_verify_init(void *vctx, void *vkey, const OSSL_PARAM params
         return 0;
 
     ctx->key = (COMPOSITE_KEY *)vkey;
+    ctx->operation = EVP_PKEY_OP_VERIFY;
 
     info = composite_find_alg_info(ctx->alg);
     if (info == NULL) {
@@ -324,34 +402,24 @@ static int composite_verify_init(void *vctx, void *vkey, const OSSL_PARAM params
     ctx->prehash_alg = info->prehash_alg;
     ctx->prehash_len = info->prehash_len;
 
-    return 1;
+    return composite_set_ctx_params(ctx, params);
 }
 
-static int composite_verify(void *vctx, const uint8_t *sig, size_t siglen,
-    const uint8_t *msg, size_t msg_len)
+/*
+ * Shared core of verification: mirrors composite_sign_ph(), taking an
+ * already-computed PH(M) from any of the same three sources.
+ */
+static int composite_verify_ph(PROV_COMPOSITE_CTX *ctx,
+    const COMPOSITE_ALG_INFO *info,
+    const uint8_t *sig, size_t siglen,
+    const uint8_t *ph, size_t ph_len)
 {
-    PROV_COMPOSITE_CTX *ctx = (PROV_COMPOSITE_CTX *)vctx;
-    const COMPOSITE_ALG_INFO *info;
     uint8_t *tbs = NULL;
-    uint8_t prehash[64]; /* max prehash output size */
     size_t tbs_len = 0;
-    size_t offset;
     size_t ml_dsa_sig_len;
     EVP_MD_CTX *md_ctx = NULL;
     EVP_PKEY_CTX *pctx = NULL;
     int ret = 0;
-
-    if (!ossl_prov_is_running())
-        return 0;
-
-    if (ctx->key == NULL || ctx->alg == NULL || sig == NULL || msg == NULL)
-        return 0;
-
-    info = composite_find_alg_info(ctx->alg);
-    if (info == NULL) {
-        ERR_raise(ERR_LIB_PROV, ERR_R_UNSUPPORTED);
-        return 0;
-    }
 
     ml_dsa_sig_len = ossl_ml_dsa_key_get_sig_len(ctx->key->ml_dsa_key);
     if (siglen <= ml_dsa_sig_len) {
@@ -359,27 +427,9 @@ static int composite_verify(void *vctx, const uint8_t *sig, size_t siglen,
         return 0;
     }
 
-    /* Compute PH(M) */
-    if (!composite_compute_prehash(ctx->libctx, info, msg, msg_len, prehash))
-        goto err;
-
-    /* Reconstruct M' — identical to sign path */
-    tbs_len = 32 + strlen(info->label) + 1 + ctx->context_string_len + info->prehash_len;
-    tbs = OPENSSL_malloc(tbs_len);
+    tbs = composite_build_mprime(ctx, info, ph, ph_len, &tbs_len);
     if (tbs == NULL)
         goto err;
-
-    offset = 0;
-    memcpy(tbs + offset, composite_sig_prefix, 32);
-    offset += 32;
-    memcpy(tbs + offset, info->label, strlen(info->label));
-    offset += strlen(info->label);
-    tbs[offset++] = (uint8_t)ctx->context_string_len;
-    if (ctx->context_string_len > 0) {
-        memcpy(tbs + offset, ctx->context_string, ctx->context_string_len);
-        offset += ctx->context_string_len;
-    }
-    memcpy(tbs + offset, prehash, info->prehash_len);
 
     /* Verify ML-DSA component, with Label as mldsa_ctx per §3.2 */
     if (!ossl_ml_dsa_verify(ctx->key->ml_dsa_key, 0,
@@ -429,6 +479,160 @@ err:
     return ret;
 }
 
+static int composite_verify(void *vctx, const uint8_t *sig, size_t siglen,
+    const uint8_t *msg, size_t msg_len)
+{
+    PROV_COMPOSITE_CTX *ctx = (PROV_COMPOSITE_CTX *)vctx;
+    const COMPOSITE_ALG_INFO *info;
+    uint8_t prehash[64]; /* max prehash output size */
+    const uint8_t *ph;
+    size_t ph_len;
+
+    if (!ossl_prov_is_running())
+        return 0;
+
+    if (ctx->key == NULL || ctx->alg == NULL || sig == NULL || msg == NULL)
+        return 0;
+
+    info = composite_find_alg_info(ctx->alg);
+    if (info == NULL) {
+        ERR_raise(ERR_LIB_PROV, ERR_R_UNSUPPORTED);
+        return 0;
+    }
+
+    if (ctx->have_prehash) {
+        /* Caller pre-computed PH(M) itself and passed it in as msg. */
+        ph = msg;
+        ph_len = msg_len;
+    } else {
+        if (!composite_compute_prehash(ctx->libctx, info, msg, msg_len, prehash))
+            return 0;
+        ph = prehash;
+        ph_len = info->prehash_len;
+    }
+
+    return composite_verify_ph(ctx, info, sig, siglen, ph, ph_len);
+}
+
+static const COMPOSITE_ALG_INFO *composite_ctx_alg_info(PROV_COMPOSITE_CTX *ctx)
+{
+    if (ctx == NULL || ctx->alg == NULL)
+        return NULL;
+    return composite_find_alg_info(ctx->alg);
+}
+
+/*
+ * Lazily start (on the first update) a streaming digest of the message for
+ * PH(M), using the algorithm's prehash digest (e.g. SHA-512).
+ */
+static int composite_signverify_msg_update(void *vctx,
+    const unsigned char *data,
+    size_t datalen)
+{
+    PROV_COMPOSITE_CTX *ctx = (PROV_COMPOSITE_CTX *)vctx;
+    const COMPOSITE_ALG_INFO *info;
+    EVP_MD *md;
+
+    if (ctx == NULL || !ossl_prov_is_running())
+        return 0;
+
+    if (ctx->prehash_ctx == NULL) {
+        info = composite_ctx_alg_info(ctx);
+        if (info == NULL)
+            return 0;
+
+        md = EVP_MD_fetch(ctx->libctx, info->prehash_alg, NULL);
+        if (md == NULL)
+            return 0;
+
+        ctx->prehash_ctx = EVP_MD_CTX_new();
+        if (ctx->prehash_ctx == NULL || !EVP_DigestInit_ex2(ctx->prehash_ctx, md, NULL)) {
+            EVP_MD_CTX_free(ctx->prehash_ctx);
+            ctx->prehash_ctx = NULL;
+            EVP_MD_free(md);
+            return 0;
+        }
+        EVP_MD_free(md);
+    }
+
+    return EVP_DigestUpdate(ctx->prehash_ctx, data, datalen);
+}
+
+static int composite_sign_msg_init(void *vctx, void *vkey,
+    const OSSL_PARAM params[])
+{
+    return composite_sign_init(vctx, vkey, params);
+}
+
+static int composite_sign_msg_final(void *vctx, unsigned char *sig,
+    size_t *siglen, size_t sigsize)
+{
+    PROV_COMPOSITE_CTX *ctx = (PROV_COMPOSITE_CTX *)vctx;
+    const COMPOSITE_ALG_INFO *info;
+    uint8_t ph[64];
+    unsigned int ph_len;
+
+    if (ctx == NULL || !ossl_prov_is_running())
+        return 0;
+
+    info = composite_ctx_alg_info(ctx);
+    if (info == NULL) {
+        ERR_raise(ERR_LIB_PROV, ERR_R_UNSUPPORTED);
+        return 0;
+    }
+
+    if (sig == NULL)
+        return composite_sign_ph(ctx, info, sig, siglen, sigsize, NULL, 0);
+
+    if (ctx->prehash_ctx == NULL)
+        return 0; /* no data was ever fed via msg_update() */
+
+    if (!EVP_DigestFinal_ex(ctx->prehash_ctx, ph, &ph_len))
+        return 0;
+    EVP_MD_CTX_free(ctx->prehash_ctx);
+    ctx->prehash_ctx = NULL;
+
+    return composite_sign_ph(ctx, info, sig, siglen, sigsize, ph, ph_len);
+}
+
+static int composite_verify_msg_init(void *vctx, void *vkey,
+    const OSSL_PARAM params[])
+{
+    return composite_verify_init(vctx, vkey, params);
+}
+
+/*
+ * Per provider-signature.pod, the signature to check is supplied out of
+ * band via OSSL_SIGNATURE_PARAM_SIGNATURE (see composite_set_ctx_params()),
+ * not as an argument here.
+ */
+static int composite_verify_msg_final(void *vctx)
+{
+    PROV_COMPOSITE_CTX *ctx = (PROV_COMPOSITE_CTX *)vctx;
+    const COMPOSITE_ALG_INFO *info;
+    uint8_t ph[64];
+    unsigned int ph_len;
+
+    if (ctx == NULL || !ossl_prov_is_running())
+        return 0;
+
+    if (ctx->sig == NULL || ctx->prehash_ctx == NULL)
+        return 0;
+
+    info = composite_ctx_alg_info(ctx);
+    if (info == NULL) {
+        ERR_raise(ERR_LIB_PROV, ERR_R_UNSUPPORTED);
+        return 0;
+    }
+
+    if (!EVP_DigestFinal_ex(ctx->prehash_ctx, ph, &ph_len))
+        return 0;
+    EVP_MD_CTX_free(ctx->prehash_ctx);
+    ctx->prehash_ctx = NULL;
+
+    return composite_verify_ph(ctx, info, ctx->sig, ctx->siglen, ph, ph_len);
+}
+
 static int composite_get_ctx_params(void *vctx, OSSL_PARAM params[])
 {
     PROV_COMPOSITE_CTX *ctx = (PROV_COMPOSITE_CTX *)vctx;
@@ -438,23 +642,30 @@ static int composite_get_ctx_params(void *vctx, OSSL_PARAM params[])
         return 0;
 
     if (p.id != NULL) {
-        /*
-         * Build DER AlgorithmIdentifier = SEQUENCE { OID }
-         *   = 0x30 || oid_sz || oid_bytes (total = oid_sz + 2 bytes)
-         */
-        uint8_t aid[12]; /* 2 header bytes + up to 10 OID bytes */
+        /* DER AlgorithmIdentifier = SEQUENCE { OID }, built like the other signature providers */
+        WPACKET pkt;
+        unsigned char aid_buf[32];
+        unsigned char *aid;
         size_t aid_len;
+        int ok;
 
-        if (ctx->oid == NULL || ctx->oid_sz == 0
-            || ctx->oid_sz > sizeof(aid) - 2)
+        if (ctx->oid == NULL || ctx->oid_sz == 0)
             return 0;
 
-        aid[0] = 0x30; /* SEQUENCE tag */
-        aid[1] = (uint8_t)ctx->oid_sz;
-        memcpy(aid + 2, ctx->oid, ctx->oid_sz);
-        aid_len = 2 + ctx->oid_sz;
+        if (!WPACKET_init_der(&pkt, aid_buf, sizeof(aid_buf)))
+            return 0;
 
-        if (!OSSL_PARAM_set_octet_string(p.id, aid, aid_len))
+        ok = ossl_DER_w_begin_sequence(&pkt, -1)
+            && ossl_DER_w_precompiled(&pkt, -1, ctx->oid, ctx->oid_sz)
+            && ossl_DER_w_end_sequence(&pkt, -1)
+            && WPACKET_finish(&pkt);
+        if (ok) {
+            WPACKET_get_total_written(&pkt, &aid_len);
+            aid = WPACKET_get_curr(&pkt);
+            ok = OSSL_PARAM_set_octet_string(p.id, aid, aid_len);
+        }
+        WPACKET_cleanup(&pkt);
+        if (!ok)
             return 0;
     }
 
@@ -469,9 +680,9 @@ static const OSSL_PARAM *composite_gettable_ctx_params(void *vctx, void *provctx
 static int composite_set_ctx_params(void *vctx, const OSSL_PARAM params[])
 {
     PROV_COMPOSITE_CTX *ctx = (PROV_COMPOSITE_CTX *)vctx;
-    struct composite_set_ctx_params_st p;
+    struct composite_verifymsg_set_ctx_params_st p;
 
-    if (ctx == NULL || !composite_set_ctx_params_decoder(params, &p))
+    if (ctx == NULL || !composite_verifymsg_set_ctx_params_decoder(params, &p))
         return 0;
 
     if (p.ctx != NULL) {
@@ -498,45 +709,27 @@ static int composite_set_ctx_params(void *vctx, const OSSL_PARAM params[])
         }
     }
 
+    if (p.ph != NULL && !OSSL_PARAM_get_int(p.ph, &ctx->have_prehash))
+        return 0;
+
+    if (p.sig != NULL && ctx->operation == EVP_PKEY_OP_VERIFY) {
+        OPENSSL_free(ctx->sig);
+        ctx->sig = NULL;
+        ctx->siglen = 0;
+        if (!OSSL_PARAM_get_octet_string(p.sig, (void **)&ctx->sig, 0, &ctx->siglen))
+            return 0;
+    }
+
     return 1;
 }
 
 static const OSSL_PARAM *composite_settable_ctx_params(void *vctx, void *provctx)
 {
+    PROV_COMPOSITE_CTX *ctx = (PROV_COMPOSITE_CTX *)vctx;
+
+    if (ctx != NULL && ctx->operation == EVP_PKEY_OP_VERIFY)
+        return composite_verifymsg_set_ctx_params_list;
     return composite_set_ctx_params_list;
-}
-
-static int composite_sign_msg_init(void *vctx, void *vkey,
-    const OSSL_PARAM params[])
-{
-    return composite_sign_init(vctx, vkey, params);
-}
-
-static int composite_signverify_msg_update(void *vctx,
-    const unsigned char *data,
-    size_t datalen)
-{
-    ERR_raise(ERR_LIB_PROV, ERR_R_UNSUPPORTED);
-    return 0;
-}
-
-static int composite_sign_msg_final(void *vctx, unsigned char *sig,
-    size_t *siglen, size_t sigsize)
-{
-    ERR_raise(ERR_LIB_PROV, ERR_R_UNSUPPORTED);
-    return 0;
-}
-
-static int composite_verify_msg_init(void *vctx, void *vkey,
-    const OSSL_PARAM params[])
-{
-    return composite_verify_init(vctx, vkey, params);
-}
-
-static int composite_verify_msg_final(void *vctx)
-{
-    ERR_raise(ERR_LIB_PROV, ERR_R_UNSUPPORTED);
-    return 0;
 }
 
 static int composite_digest_signverify_init(void *vctx, const char *mdname,

@@ -54,6 +54,16 @@ typedef struct {
     EVP_PKEY_CTX *classic_ctx;
 
     COMPOSITE_KEY *key;
+
+    /* sign vs verify, drives which ctx params (e.g. "signature") apply */
+    int operation;
+    /* 1 if the caller supplies PH(M) directly via OSSL_SIGNATURE_PARAM_COMPOSITE_PREHASH */
+    int have_prehash;
+    /* streaming digest for PH(M); lazily created on the first msg_update() */
+    EVP_MD_CTX *prehash_ctx;
+    /* signature to check against, set via "signature" for verify_message_final() */
+    unsigned char *sig;
+    size_t siglen;
 } PROV_COMPOSITE_CTX;
 
 COMPOSITE_KEY *ossl_prov_composite_new(PROV_CTX *ctx, const char *propq,

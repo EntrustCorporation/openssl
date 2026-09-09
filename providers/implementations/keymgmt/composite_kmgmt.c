@@ -85,6 +85,7 @@ void ossl_composite_key_free(COMPOSITE_KEY *key)
     OPENSSL_free(key);
 }
 
+/* True only if the ML-DSA half satisfies selection AND the classic half is present. */
 static int ossl_composite_key_has(const COMPOSITE_KEY *key, int selection)
 {
     if (!ossl_ml_dsa_key_has(key->ml_dsa_key, selection))
@@ -95,8 +96,9 @@ static int ossl_composite_key_has(const COMPOSITE_KEY *key, int selection)
 }
 
 /*
- * Returns the combined public key length in bytes: ML-DSA pk_len plus the
- * classic component public key size.  Used to report OSSL_PKEY_PARAM_BITS.
+ * Approximate combined public key length in bytes (ML-DSA pk_len plus
+ * ceil(classic bits / 8)).  Not the exact DER/point-encoded size — only
+ * valid for reporting OSSL_PKEY_PARAM_BITS, never for buffer sizing.
  */
 static size_t ossl_composite_key_get_pub_len(const COMPOSITE_KEY *key)
 {
@@ -413,6 +415,10 @@ static int composite_get_params(void *keydata, OSSL_PARAM params[])
     return 1;
 }
 
+/*
+ * Validates the key material itself (pairwise pub/priv consistency for
+ * both sub-keys).
+ */
 static int composite_validate(const void *keydata, int selection,
     int check_type)
 {
