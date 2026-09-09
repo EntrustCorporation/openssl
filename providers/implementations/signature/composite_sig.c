@@ -665,6 +665,25 @@ static const COMPOSITE_ALG_INFO *composite_ctx_alg_info(PROV_COMPOSITE_CTX *ctx)
 }
 
 /*
+ * Finalize the streaming PH(M) digest, mirroring composite_compute_prehash():
+ * SHAKE256 is a XOF and must use EVP_DigestFinalXOF() with the algorithm's
+ * fixed prehash_len, since EVP_DigestFinal_ex() would truncate it to the
+ * digest's default fixed output size instead.
+ */
+static int composite_prehash_final(PROV_COMPOSITE_CTX *ctx,
+    const COMPOSITE_ALG_INFO *info,
+    uint8_t *ph, unsigned int *ph_len)
+{
+    if (OPENSSL_strcasecmp(info->prehash_alg, "SHAKE256") == 0) {
+        if (!EVP_DigestFinalXOF(ctx->prehash_ctx, ph, info->prehash_len))
+            return 0;
+        *ph_len = (unsigned int)info->prehash_len;
+        return 1;
+    }
+    return EVP_DigestFinal_ex(ctx->prehash_ctx, ph, ph_len);
+}
+
+/*
  * Lazily start (on the first update) a streaming digest of the message for
  * PH(M), using the algorithm's prehash digest (e.g. SHA-512).
  */
@@ -730,7 +749,7 @@ static int composite_sign_msg_final(void *vctx, unsigned char *sig,
     if (ctx->prehash_ctx == NULL)
         return 0; /* no data was ever fed via msg_update() */
 
-    if (!EVP_DigestFinal_ex(ctx->prehash_ctx, ph, &ph_len))
+    if (!composite_prehash_final(ctx, info, ph, &ph_len))
         return 0;
     EVP_MD_CTX_free(ctx->prehash_ctx);
     ctx->prehash_ctx = NULL;
@@ -768,7 +787,7 @@ static int composite_verify_msg_final(void *vctx)
         return 0;
     }
 
-    if (!EVP_DigestFinal_ex(ctx->prehash_ctx, ph, &ph_len))
+    if (!composite_prehash_final(ctx, info, ph, &ph_len))
         return 0;
     EVP_MD_CTX_free(ctx->prehash_ctx);
     ctx->prehash_ctx = NULL;

@@ -594,11 +594,58 @@ err:
  * Externally pre-computed PH(M) tests (OSSL_SIGNATURE_PARAM_COMPOSITE_PREHASH)
  * ========================================================================= */
 
+/* Mirrors each entry's prehash_alg/prehash_len in composite_sig.c's composite_alg_table */
+typedef struct {
+    const char *prehash_alg;
+    size_t prehash_len;
+} COMPOSITE_PREHASH_INFO;
+
+static const COMPOSITE_PREHASH_INFO composite_alg_prehash[] = {
+    { "SHA-256", 32 }, /* ML-DSA-44-RSA2048-PSS-SHA256 */
+    { "SHA-256", 32 }, /* ML-DSA-44-RSA2048-PKCS15-SHA256 */
+    { "SHA-512", 64 }, /* ML-DSA-44-Ed25519-SHA512 */
+    { "SHA-256", 32 }, /* ML-DSA-44-ECDSA-P256-SHA256 */
+    { "SHA-512", 64 }, /* ML-DSA-65-RSA3072-PSS-SHA512 */
+    { "SHA-512", 64 }, /* ML-DSA-65-RSA3072-PKCS15-SHA512 */
+    { "SHA-512", 64 }, /* ML-DSA-65-RSA4096-PSS-SHA512 */
+    { "SHA-512", 64 }, /* ML-DSA-65-RSA4096-PKCS15-SHA512 */
+    { "SHA-512", 64 }, /* ML-DSA-65-ECDSA-P256-SHA512 */
+    { "SHA-512", 64 }, /* ML-DSA-65-ECDSA-P384-SHA512 */
+    { "SHA-512", 64 }, /* ML-DSA-65-ECDSA-brainpoolP256r1-SHA512 */
+    { "SHA-512", 64 }, /* ML-DSA-65-Ed25519-SHA512 */
+    { "SHA-512", 64 }, /* ML-DSA-87-ECDSA-P384-SHA512 */
+    { "SHA-512", 64 }, /* ML-DSA-87-ECDSA-brainpoolP384r1-SHA512 */
+    { "SHAKE256", 64 }, /* ML-DSA-87-Ed448-SHAKE256 (XOF) */
+    { "SHA-512", 64 }, /* ML-DSA-87-RSA3072-PSS-SHA512 */
+    { "SHA-512", 64 }, /* ML-DSA-87-RSA4096-PSS-SHA512 */
+    { "SHA-512", 64 }, /* ML-DSA-87-ECDSA-P521-SHA512 */
+};
+
+/* SHAKE256 is a XOF and needs EVP_DigestFinalXOF(), not a plain digest final */
+static int test_compute_prehash(const COMPOSITE_PREHASH_INFO *info,
+    const uint8_t *msg, size_t msg_len, uint8_t *out, size_t *out_len)
+{
+    if (OPENSSL_strcasecmp(info->prehash_alg, "SHAKE256") == 0) {
+        EVP_MD_CTX *mctx = EVP_MD_CTX_new();
+        EVP_MD *md = EVP_MD_fetch(lib_ctx, "SHAKE256", NULL);
+        int ok = (mctx != NULL && md != NULL
+            && EVP_DigestInit_ex(mctx, md, NULL)
+            && EVP_DigestUpdate(mctx, msg, msg_len)
+            && EVP_DigestFinalXOF(mctx, out, info->prehash_len));
+
+        EVP_MD_CTX_free(mctx);
+        EVP_MD_free(md);
+        if (ok)
+            *out_len = info->prehash_len;
+        return ok;
+    }
+    return EVP_Q_digest(lib_ctx, info->prehash_alg, NULL, msg, msg_len, out, out_len);
+}
+
 /*
  * A caller may compute PH(M) itself (e.g. on another machine) and hand it
  * to sign()/verify() in place of the raw message, by setting
- * OSSL_SIGNATURE_PARAM_COMPOSITE_PREHASH.  Every composite algorithm
- * currently defined uses SHA-512 for PH(M).  This must produce a signature
+ * OSSL_SIGNATURE_PARAM_COMPOSITE_PREHASH.  This must produce a signature
  * that verifies both via the same flag and via a normal, independently
  * computed PH(M); it must also be interchangeable with a signature made the
  * ordinary way (raw message, no flag).
@@ -607,6 +654,7 @@ static int composite_external_prehash_test(int tst_id)
 {
     int ret = 0;
     const char *alg = composite_alg_names[tst_id];
+    const COMPOSITE_PREHASH_INFO *phinfo = &composite_alg_prehash[tst_id];
     EVP_PKEY *key = NULL;
     EVP_PKEY_CTX *sctx = NULL, *vctx = NULL;
     EVP_SIGNATURE *sig_alg = NULL;
@@ -629,8 +677,7 @@ static int composite_external_prehash_test(int tst_id)
     params[1] = OSSL_PARAM_construct_end();
 
     if (!TEST_ptr(key = do_gen_key(alg))
-        || !TEST_int_eq(EVP_Q_digest(lib_ctx, "SHA-512", NULL,
-                            test_msg, sizeof(test_msg) - 1,
+        || !TEST_int_eq(test_compute_prehash(phinfo, test_msg, sizeof(test_msg) - 1,
                             prehash, &prehash_len),
             1))
         goto err;
