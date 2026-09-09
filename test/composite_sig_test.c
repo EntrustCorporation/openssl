@@ -494,6 +494,12 @@ static int composite_streaming_sign_verify_test(int tst_id)
         return 1;
     }
 #endif
+#ifdef OPENSSL_NO_ECX
+    if (strstr(alg, "Ed25519") != NULL || strstr(alg, "Ed448") != NULL) {
+        TEST_note("Skipping %s - ECX (Ed25519/Ed448) not available", alg);
+        return 1;
+    }
+#endif
 
     if (!TEST_ptr(key = do_gen_key(alg))
         || !TEST_ptr(sctx = EVP_PKEY_CTX_new_from_pkey(lib_ctx, key, NULL))
@@ -553,6 +559,12 @@ static int composite_streaming_tampered_sig_test(int tst_id)
 #ifdef OPENSSL_NO_EC
     if (strstr(alg, "ECDSA") != NULL) {
         TEST_note("Skipping %s - EC not available", alg);
+        return 1;
+    }
+#endif
+#ifdef OPENSSL_NO_ECX
+    if (strstr(alg, "Ed25519") != NULL || strstr(alg, "Ed448") != NULL) {
+        TEST_note("Skipping %s - ECX (Ed25519/Ed448) not available", alg);
         return 1;
     }
 #endif
@@ -668,6 +680,12 @@ static int composite_external_prehash_test(int tst_id)
 #ifdef OPENSSL_NO_EC
     if (strstr(alg, "ECDSA") != NULL) {
         TEST_note("Skipping %s - EC not available", alg);
+        return 1;
+    }
+#endif
+#ifdef OPENSSL_NO_ECX
+    if (strstr(alg, "Ed25519") != NULL || strstr(alg, "Ed448") != NULL) {
+        TEST_note("Skipping %s - ECX (Ed25519/Ed448) not available", alg);
         return 1;
     }
 #endif
