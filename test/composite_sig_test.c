@@ -467,6 +467,225 @@ err:
 }
 
 /* =========================================================================
+ * Streaming (sign/verify_message_update) tests
+ * ========================================================================= */
+
+/*
+ * Feed the message in two chunks via the streaming API, then verify the
+ * result both via the streaming API (EVP_PKEY_CTX_set_signature() +
+ * verify_message_update()/_final()) and via the one-shot API, to confirm
+ * both paths agree.
+ */
+static int composite_streaming_sign_verify_test(int tst_id)
+{
+    int ret = 0;
+    const char *alg = composite_alg_names[tst_id];
+    EVP_PKEY *key = NULL;
+    EVP_PKEY_CTX *sctx = NULL, *vctx = NULL;
+    EVP_SIGNATURE *sig_alg = NULL;
+    uint8_t *sig = NULL;
+    size_t sig_len = 0;
+    size_t msg_len = sizeof(test_msg) - 1;
+    size_t half = msg_len / 2;
+
+#ifdef OPENSSL_NO_EC
+    if (strstr(alg, "ECDSA") != NULL) {
+        TEST_note("Skipping %s - EC not available", alg);
+        return 1;
+    }
+#endif
+
+    if (!TEST_ptr(key = do_gen_key(alg))
+        || !TEST_ptr(sctx = EVP_PKEY_CTX_new_from_pkey(lib_ctx, key, NULL))
+        || !TEST_ptr(sig_alg = EVP_SIGNATURE_fetch(lib_ctx, alg, NULL))
+        || !TEST_int_eq(EVP_PKEY_sign_message_init(sctx, sig_alg, NULL), 1)
+        || !TEST_int_eq(EVP_PKEY_sign_message_update(sctx, test_msg, half), 1)
+        || !TEST_int_eq(EVP_PKEY_sign_message_update(sctx, test_msg + half,
+                            msg_len - half),
+            1)
+        || !TEST_int_eq(EVP_PKEY_sign_message_final(sctx, NULL, &sig_len), 1)
+        || !TEST_ptr(sig = OPENSSL_zalloc(sig_len))
+        || !TEST_int_eq(EVP_PKEY_sign_message_final(sctx, sig, &sig_len), 1))
+        goto err;
+
+    /* Verify via the streaming API, fed in different-size chunks */
+    if (!TEST_ptr(vctx = EVP_PKEY_CTX_new_from_pkey(lib_ctx, key, NULL))
+        || !TEST_int_eq(EVP_PKEY_verify_message_init(vctx, sig_alg, NULL), 1)
+        || !TEST_int_eq(EVP_PKEY_CTX_set_signature(vctx, sig, sig_len), 1)
+        || !TEST_int_eq(EVP_PKEY_verify_message_update(vctx, test_msg, 1), 1)
+        || !TEST_int_eq(EVP_PKEY_verify_message_update(vctx, test_msg + 1,
+                            msg_len - 1),
+            1)
+        || !TEST_int_eq(EVP_PKEY_verify_message_final(vctx), 1))
+        goto err;
+    EVP_PKEY_CTX_free(vctx);
+    vctx = NULL;
+
+    /* The same signature must also verify via the one-shot API */
+    if (!TEST_ptr(vctx = EVP_PKEY_CTX_new_from_pkey(lib_ctx, key, NULL))
+        || !TEST_int_eq(EVP_PKEY_verify_message_init(vctx, sig_alg, NULL), 1)
+        || !TEST_int_eq(EVP_PKEY_verify(vctx, sig, sig_len, test_msg, msg_len), 1))
+        goto err;
+
+    ret = 1;
+err:
+    EVP_PKEY_free(key);
+    EVP_SIGNATURE_free(sig_alg);
+    OPENSSL_free(sig);
+    EVP_PKEY_CTX_free(sctx);
+    EVP_PKEY_CTX_free(vctx);
+    return ret;
+}
+
+/*
+ * A tampered signature must not verify via the streaming API either.
+ */
+static int composite_streaming_tampered_sig_test(int tst_id)
+{
+    int ret = 0;
+    const char *alg = composite_alg_names[tst_id];
+    EVP_PKEY *key = NULL;
+    EVP_PKEY_CTX *sctx = NULL, *vctx = NULL;
+    EVP_SIGNATURE *sig_alg = NULL;
+    uint8_t *sig = NULL;
+    size_t sig_len = 0;
+
+#ifdef OPENSSL_NO_EC
+    if (strstr(alg, "ECDSA") != NULL) {
+        TEST_note("Skipping %s - EC not available", alg);
+        return 1;
+    }
+#endif
+
+    if (!TEST_ptr(key = do_gen_key(alg))
+        || !TEST_ptr(sctx = EVP_PKEY_CTX_new_from_pkey(lib_ctx, key, NULL))
+        || !TEST_ptr(sig_alg = EVP_SIGNATURE_fetch(lib_ctx, alg, NULL))
+        || !TEST_int_eq(EVP_PKEY_sign_message_init(sctx, sig_alg, NULL), 1)
+        || !TEST_int_eq(EVP_PKEY_sign_message_update(sctx, test_msg,
+                            sizeof(test_msg) - 1),
+            1)
+        || !TEST_int_eq(EVP_PKEY_sign_message_final(sctx, NULL, &sig_len), 1)
+        || !TEST_ptr(sig = OPENSSL_zalloc(sig_len))
+        || !TEST_int_eq(EVP_PKEY_sign_message_final(sctx, sig, &sig_len), 1))
+        goto err;
+
+    sig[sig_len / 2] ^= 0x01;
+
+    if (!TEST_ptr(vctx = EVP_PKEY_CTX_new_from_pkey(lib_ctx, key, NULL))
+        || !TEST_int_eq(EVP_PKEY_verify_message_init(vctx, sig_alg, NULL), 1)
+        || !TEST_int_eq(EVP_PKEY_CTX_set_signature(vctx, sig, sig_len), 1)
+        || !TEST_int_eq(EVP_PKEY_verify_message_update(vctx, test_msg,
+                            sizeof(test_msg) - 1),
+            1)
+        || !TEST_int_eq(EVP_PKEY_verify_message_final(vctx), 0))
+        goto err;
+
+    ret = 1;
+err:
+    EVP_PKEY_free(key);
+    EVP_SIGNATURE_free(sig_alg);
+    OPENSSL_free(sig);
+    EVP_PKEY_CTX_free(sctx);
+    EVP_PKEY_CTX_free(vctx);
+    return ret;
+}
+
+/* =========================================================================
+ * Externally pre-computed PH(M) tests (OSSL_SIGNATURE_PARAM_COMPOSITE_PREHASH)
+ * ========================================================================= */
+
+/*
+ * A caller may compute PH(M) itself (e.g. on another machine) and hand it
+ * to sign()/verify() in place of the raw message, by setting
+ * OSSL_SIGNATURE_PARAM_COMPOSITE_PREHASH.  Every composite algorithm
+ * currently defined uses SHA-512 for PH(M).  This must produce a signature
+ * that verifies both via the same flag and via a normal, independently
+ * computed PH(M); it must also be interchangeable with a signature made the
+ * ordinary way (raw message, no flag).
+ */
+static int composite_external_prehash_test(int tst_id)
+{
+    int ret = 0;
+    const char *alg = composite_alg_names[tst_id];
+    EVP_PKEY *key = NULL;
+    EVP_PKEY_CTX *sctx = NULL, *vctx = NULL;
+    EVP_SIGNATURE *sig_alg = NULL;
+    uint8_t *sig = NULL, *sig2 = NULL;
+    size_t sig_len = 0, sig2_len = 0;
+    uint8_t prehash[64];
+    size_t prehash_len = sizeof(prehash);
+    int have_prehash = 1;
+    OSSL_PARAM params[2];
+
+#ifdef OPENSSL_NO_EC
+    if (strstr(alg, "ECDSA") != NULL) {
+        TEST_note("Skipping %s - EC not available", alg);
+        return 1;
+    }
+#endif
+
+    params[0] = OSSL_PARAM_construct_int(OSSL_SIGNATURE_PARAM_COMPOSITE_PREHASH,
+        &have_prehash);
+    params[1] = OSSL_PARAM_construct_end();
+
+    if (!TEST_ptr(key = do_gen_key(alg))
+        || !TEST_int_eq(EVP_Q_digest(lib_ctx, "SHA-512", NULL,
+                            test_msg, sizeof(test_msg) - 1,
+                            prehash, &prehash_len),
+            1))
+        goto err;
+
+    /* Sign by feeding the pre-computed PH(M) directly, no raw message */
+    if (!TEST_ptr(sctx = EVP_PKEY_CTX_new_from_pkey(lib_ctx, key, NULL))
+        || !TEST_ptr(sig_alg = EVP_SIGNATURE_fetch(lib_ctx, alg, NULL))
+        || !TEST_int_eq(EVP_PKEY_sign_message_init(sctx, sig_alg, params), 1)
+        || !TEST_int_eq(EVP_PKEY_sign(sctx, NULL, &sig_len, prehash, prehash_len), 1)
+        || !TEST_ptr(sig = OPENSSL_zalloc(sig_len))
+        || !TEST_int_eq(EVP_PKEY_sign(sctx, sig, &sig_len, prehash, prehash_len), 1))
+        goto err;
+
+    /* Verify the same way, using only the pre-computed hash */
+    if (!TEST_ptr(vctx = EVP_PKEY_CTX_new_from_pkey(lib_ctx, key, NULL))
+        || !TEST_int_eq(EVP_PKEY_verify_message_init(vctx, sig_alg, params), 1)
+        || !TEST_int_eq(EVP_PKEY_verify(vctx, sig, sig_len, prehash, prehash_len), 1))
+        goto err;
+    EVP_PKEY_CTX_free(vctx);
+    vctx = NULL;
+
+    /*
+     * A signature made the ordinary way (raw message, no flag) must also
+     * verify against the independently computed PH(M), confirming both
+     * code paths build the same M'.
+     */
+    EVP_PKEY_CTX_free(sctx);
+    if (!TEST_ptr(sctx = EVP_PKEY_CTX_new_from_pkey(lib_ctx, key, NULL))
+        || !TEST_int_eq(EVP_PKEY_sign_message_init(sctx, sig_alg, NULL), 1)
+        || !TEST_int_eq(EVP_PKEY_sign(sctx, NULL, &sig2_len,
+                            test_msg, sizeof(test_msg) - 1),
+            1)
+        || !TEST_ptr(sig2 = OPENSSL_zalloc(sig2_len))
+        || !TEST_int_eq(EVP_PKEY_sign(sctx, sig2, &sig2_len,
+                            test_msg, sizeof(test_msg) - 1),
+            1))
+        goto err;
+
+    if (!TEST_ptr(vctx = EVP_PKEY_CTX_new_from_pkey(lib_ctx, key, NULL))
+        || !TEST_int_eq(EVP_PKEY_verify_message_init(vctx, sig_alg, params), 1)
+        || !TEST_int_eq(EVP_PKEY_verify(vctx, sig2, sig2_len, prehash, prehash_len), 1))
+        goto err;
+
+    ret = 1;
+err:
+    EVP_PKEY_free(key);
+    EVP_SIGNATURE_free(sig_alg);
+    OPENSSL_free(sig);
+    OPENSSL_free(sig2);
+    EVP_PKEY_CTX_free(sctx);
+    EVP_PKEY_CTX_free(vctx);
+    return ret;
+}
+
+/* =========================================================================
  * Test registration
  * ========================================================================= */
 
@@ -516,6 +735,13 @@ int setup_tests(void)
     /* Negative tests */
     ADD_TEST(composite_cross_alg_mismatch_test);
     ADD_ALL_TESTS(composite_tampered_sig_test, NUM_COMPOSITE_ALGS);
+
+    /* Streaming (sign/verify_message_update) tests */
+    ADD_ALL_TESTS(composite_streaming_sign_verify_test, NUM_COMPOSITE_ALGS);
+    ADD_ALL_TESTS(composite_streaming_tampered_sig_test, NUM_COMPOSITE_ALGS);
+
+    /* Externally pre-computed PH(M) tests */
+    ADD_ALL_TESTS(composite_external_prehash_test, NUM_COMPOSITE_ALGS);
 
     return 1;
 }

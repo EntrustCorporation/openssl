@@ -9,8 +9,9 @@
 
 -- Taken from https://datatracker.ietf.org/doc/draft-ietf-lamps-pq-composite-sigs/
 
-sigAlgs OBJECT IDENTIFIER ::= { 1 3 6 1 5 5 7 6 }
+pkixAlgs OBJECT IDENTIFIER ::= { 1 3 6 1 5 5 7 6 }
 
+<<<<<<< HEAD
 id-mldsa44-rsa2048-pss-sha256 OBJECT IDENTIFIER ::= { sigAlgs 37 }
 id-mldsa44-rsa2048-pkcs15-sha256 OBJECT IDENTIFIER ::= { sigAlgs 38 }
 id-mldsa44-ed25519-sha512 OBJECT IDENTIFIER ::= { sigAlgs 39 }
@@ -29,3 +30,7 @@ id-mldsa87-ed448-shake256 OBJECT IDENTIFIER ::= { sigAlgs 51 }
 id-mldsa87-rsa3072-pss-sha512 OBJECT IDENTIFIER ::= { sigAlgs 52 } 
 id-mldsa87-rsa4096-pss-sha512 OBJECT IDENTIFIER ::= { sigAlgs 53 } 
 id-mldsa87-ecdsa-p521-sha512 OBJECT IDENTIFIER ::= { sigAlgs 54 } 
+=======
+id-mldsa65-rsa3072-pkcs15-sha512 OBJECT IDENTIFIER ::= { pkixAlgs 42 } 
+id-mldsa65-ecdsa-p256-sha512 OBJECT IDENTIFIER ::= { pkixAlgs 45 } 
+>>>>>>> 0935019c3a (Addressed Mike's comments)
