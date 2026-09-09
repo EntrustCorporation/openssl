@@ -126,6 +126,7 @@ push @files, qw(
                 evppkey_ml_dsa_87_wycheproof_sign.txt
                 evppkey_ml_dsa_87_wycheproof_verify.txt
                ) unless $no_ml_dsa;
+my $no_composite = disabled("composite");
 push @files, qw(
                 evppkey_ml_kem_512_keygen.txt
                 evppkey_ml_kem_512_encap.txt
@@ -187,6 +188,14 @@ push @defltfiles, qw(evppkey_brainpool.txt) unless $no_ec;
 push @defltfiles, qw(evppkey_ecx_kem.txt) unless $no_ecx;
 push @defltfiles, qw(evppkey_dsa_rfc6979.txt) unless ($no_dsa || $no_determinstic_nonce);
 push @defltfiles, qw(evppkey_sm2.txt) unless $no_sm2;
+# Composite algorithms are not in the FIPS provider — default provider only.
+# Some composite algorithms use ECX (Ed25519/Ed448) components; since the test
+# data files mix ECX and non-ECX stanzas, skip all of them in no-ecx builds.
+push @defltfiles, qw(
+                      evppkey_composite_keygen.txt
+                      evppkey_composite_siggen.txt
+                      evppkey_composite_sigver.txt
+                     ) unless $no_composite || $no_ecx;
 push @defltfiles, qw(evpciph_aes_gcm_siv.txt) unless $no_siv;
 push @defltfiles, qw(evpciph_aes_siv.txt) unless $no_siv;
 push @defltfiles, qw(evpkdf_argon2.txt) unless $no_argon2;
