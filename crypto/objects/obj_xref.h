@@ -105,6 +105,10 @@ static const nid_triple sigoid_srt[] = {
     {NID_SLH_DSA_SHAKE_192f, NID_undef, NID_SLH_DSA_SHAKE_192f},
     {NID_SLH_DSA_SHAKE_256s, NID_undef, NID_SLH_DSA_SHAKE_256s},
     {NID_SLH_DSA_SHAKE_256f, NID_undef, NID_SLH_DSA_SHAKE_256f},
+    {NID_ML_DSA_65_RSA3072_PKCS15_SHA512, NID_undef,
+     NID_ML_DSA_65_RSA3072_PKCS15_SHA512},
+    {NID_ML_DSA_65_ECDSA_P256_SHA512, NID_undef,
+     NID_ML_DSA_65_ECDSA_P256_SHA512},
 };
 
 static const nid_triple *const sigoid_srt_xref[] = {
