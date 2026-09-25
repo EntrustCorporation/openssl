@@ -499,6 +499,7 @@ id-pkix 11		: id-qcs
 id-pkix 14		: id-cp
 id-pkix 12		: id-cct
 id-pkix 21		: id-ppl
+id-pkix 25 1		: id-rdna-unsigned
 id-pkix 48		: id-ad
 
 # PKIX Modules
@@ -640,6 +641,7 @@ id-alg 1		: id-alg-des40
 id-alg 2		: id-alg-noSignature
 id-alg 3		: id-alg-dh-sig-hmac-sha1
 id-alg 4		: id-alg-dh-pop
+id-alg 36		: id-alg-unsigned
 
 # Composite signature algorithms (draft-ietf-lamps-pq-composite-sigs)
 id-alg 37	: id-mldsa44-rsa2048-pss-sha256			: ML-DSA-44-RSA2048-PSS-SHA256
@@ -1043,6 +1045,9 @@ id-smime-alg 8		: ZLIB			: zlib compression
 !Alias csor 2 16 840 1 101 3
 !Alias nistAlgorithms csor 4
 !Alias aes nistAlgorithms 1
+
+# Base AES OID (used by Java keytool for generic AES keys)
+nistAlgorithms 1	: id-aes
 
 aes 1			: AES-128-ECB		: aes-128-ecb
 aes 2			: AES-128-CBC		: aes-128-cbc
