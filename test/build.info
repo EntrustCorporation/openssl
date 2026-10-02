@@ -376,6 +376,13 @@ IF[{- !$disabled{tests} -}]
     ENDIF
   ENDIF
 
+  IF[{- !$disabled{'composite'} -}]
+    PROGRAMS{noinst}=composite_sig_test
+    SOURCE[composite_sig_test]=composite_sig_test.c
+    INCLUDE[composite_sig_test]=../include ../apps/include
+    DEPEND[composite_sig_test]=../libcrypto.a libtestutil.a
+  ENDIF
+
   PROGRAMS{noinst}=aeswrap_test
   SOURCE[aeswrap_test]=aeswrap_test.c
   INCLUDE[aeswrap_test]=../include ../apps/include
