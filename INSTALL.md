@@ -698,6 +698,16 @@ Don't automatically load the default `openssl.cnf` file.
 Typically OpenSSL will automatically load a system config file which configures
 default SSL options.
 
+### no-buildinfo-cflags
+
+Don't record the compiler command line and flags in libcrypto.
+
+By default they are reported by `OpenSSL_version(OPENSSL_CFLAGS)` and
+`openssl version -f`.  As they may contain environment specific paths and
+flags, they make it harder to build bit-for-bit identical binaries in
+different build environments.  With this option they are reported as
+`compiler: information not available` instead.
+
 ### enable-buildtest-c++
 
 While testing, generate C++ buildtest files that simply check that the public
@@ -1194,7 +1204,7 @@ Analogous to `no-{protocol}` but in addition do not build the methods for
 applications to explicitly select individual protocol versions.  Note that there
 is no `no-tls1_3-method` option because there is no application method for
 TLSv1.3.
-`no-ssl3` is deprecated and does nothing.
+`no-ssl3-method` is deprecated and does nothing.
 
 Using individual protocol methods directly is deprecated.  Applications should
 use `TLS_method()` instead.
@@ -1214,7 +1224,7 @@ The `lms` algorithm support is currently limited to verification only as per
         des|dh|dsa|
         ec|ec2m|ecdh|ecdsa|hmac-drbg-kdf|idea|ikev2kdf|kbkdf|krb5kdf|
         md4|mdc2|
-        ml-dsa|ml-kem|
+        ml-dsa|ml-kem|ml-dsa-composite|
         ocb|poly1305|pvkkdf|rc2|rc4|rmd160|scrypt|
         seed|siphash|siv|slh-dsa|sm2|sm3|sm4|snmpkdf|srtpkdf|sshkdf|sskdf|
         x942kdf|x963kdf|whirlpool}
@@ -1222,6 +1232,11 @@ The `lms` algorithm support is currently limited to verification only as per
 Build without support for the specified algorithm.
 
 The `ripemd` algorithm is deprecated and if used is synonymous with `rmd160`.
+
+The `ml-dsa-composite` algorithms (composite post-quantum/classical signature
+schemes combining `ml-dsa` with `rsa` or `ec`) are automatically disabled
+when `ml-dsa` is disabled. The ECDSA composites (`ML-DSA-44-ECDSA-P256-SHA256`
+and `ML-DSA-87-ECDSA-P384-SHA512`) are also left out when `ec` is disabled.
 
 Compiler-specific options
 -------------------------

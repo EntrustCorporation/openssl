@@ -480,6 +480,7 @@ my @disablables_algorithms = (
     "mdc2",
     "ml-dsa",
     "ml-kem",
+    "ml-dsa-composite",
     "lms",
     "ocb",
     "poly1305",
@@ -518,6 +519,7 @@ my @disablables_features = (
     "autoerrinit",
     "autoload-config",
     "brotli-dynamic",
+    "buildinfo-cflags",
     "buildtest-c++",
     "bulk",
     "cached-fetch",
@@ -532,6 +534,7 @@ my @disablables_features = (
     "h3demo",
     "hqinterop",
     "deprecated",
+    "dgram-pair-pcap",
     "docs",
     "dso",
     "ech",
@@ -585,7 +588,6 @@ my @disablables_features = (
     "weak-ssl-ciphers",
     "zlib-dynamic",
     "zstd-dynamic",
-
 );
 
 my @disablables = sort (@disablables_protocols,@disablables_algorithms,@disablables_features);
@@ -634,6 +636,7 @@ our %disabled = ( # "what"         => "comment"
                   "allocfail-tests"     => "default",
                   "ct-validation"       => "default",
                   "demos"               => "default",
+                  "dgram-pair-pcap"     => "default",
                   "h3demo"              => "default",
                   "hqinterop"           => "default",
                   "ec_explicit_curves" => "default",
@@ -677,7 +680,7 @@ my @disable_cascades = (
                              "ec", "ech",
                              "filenames", "hmac-drbg-kdf",
                              "idea", "ikev2kdf", "kbkdf", "krb5kdf", "ktls", "lms",
-                             "md4", "ml-dsa", "ml-kem", "multiblock",
+                             "md4", "ml-dsa", "ml-kem", "ml-dsa-composite", "multiblock",
                              "nextprotoneg", "ocsp", "ocb", "poly1305", "psk",
                              "pvkkdf", "rc2", "rc4", "rmd160",
                              "scrypt", "seed", "siphash", "siv",
@@ -694,6 +697,7 @@ my @disable_cascades = (
     "brotli"            => [ "brotli-dynamic" ],
     "zstd"              => [ "zstd-dynamic" ],
     "des"               => [ "mdc2" ],
+    "ml-dsa"            => [ "ml-dsa-composite" ],
     "deprecated"        => [ "tls-deprecated-ec" ],
     "ec"                => [ qw(ec2m ec_explicit_curves sm2 gost ecx tls-deprecated-ec) ],
     "dgram"             => [ "dtls", "quic", "sctp" ],
